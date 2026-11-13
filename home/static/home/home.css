@@ -1,0 +1,166 @@
+body {
+    font-family: Arial, sans-serif;
+    background: linear-gradient(145deg, #f2f2f2, #e6e6e6);
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+
+.language-selector {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+}
+
+.container {
+    margin-top: 100px;
+}
+
+.logo {
+    width: 180px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 2.5em;
+    margin-bottom: 30px;
+}
+
+.brand {
+    color: #2b8af5;
+    font-weight: bold;
+}
+
+.cta-button {
+    display: inline-block;
+    padding: 15px 25px;
+    background-color: #2b8af5;
+    color: white;
+    text-decoration: none;
+    font-size: 1.1em;
+    border-radius: 8px;
+    transition: background-color 0.3s ease;
+    margin-bottom: 40px;
+}
+
+.cta-button:hover {
+    background-color: #1a6fd3;
+}
+
+.newsletter {
+    margin-top: 20px;
+}
+
+.newsletter p {
+    font-size: 1em;
+    line-height: 1.5;
+    color: #444;
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.newsletter input[type="email"] {
+    padding: 10px;
+    width: 250px;
+    max-width: 80%;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.newsletter button {
+    padding: 10px 20px;
+    background-color: #2b8af5;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    margin-left: 10px;
+    cursor: pointer;
+}
+
+.newsletter button:hover {
+    background-color: #1a6fd3;
+}
+
+/* Barre du haut */
+.header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Logo HKO en haut à gauche, plus petit */
+.logo-header {
+    width: 140px;
+    height: auto;
+    margin: 0;
+}
+
+/* Effet pression sur le bouton au clic */
+.cta-button:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
+}
+
+@media (max-width: 600px) {
+    .header-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 12px;
+    }
+
+    .language-selector {
+        position: static;
+        margin-top: 10px;
+        align-self: flex-end;
+    }
+
+    .container {
+        margin-top: 90px;
+        padding: 0 15px;
+    }
+
+    h1 {
+        font-size: 2em; /* Au lieu de 1.6em */
+        line-height: 1.4;
+    }
+
+    .cta-button {
+        width: 100%;
+        font-size: 1.1em; /* Légèrement plus grande */
+        padding: 15px;
+        border-radius: 10px;
+    }
+
+    .newsletter p {
+        font-size: 1.1em; /* Plus lisible sur petit écran */
+        text-align: center;
+        margin-bottom: 15px;
+    }
+
+    .newsletter input[type="email"] {
+        width: 100%;
+        font-size: 1em;
+        padding: 12px;
+        margin-bottom: 10px;
+    }
+
+    .newsletter button {
+        width: 100%;
+        font-size: 1em;
+        padding: 12px;
+        margin-left: 0;
+    }
+
+    .logo {
+        width: 140px; /* Grossi un peu le logo */
+    }
+
+    .logo-header {
+        width: 120px; /* Si utilisé */
+    }
+}

@@ -1,0 +1,34 @@
+
+# Environnement virtuel
+env/
+.venv/
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+
+# Base de données locale (si inutile dans Git)
+*.sqlite3
+
+# Fichiers logs
+*.log
+logs/
+
+# Fichiers config sensibles
+.env
+
+# Dossiers d'output ou de cache
+*.egg-info/
+*.dist-info/
+*.whl
+*.so
+*.pyd
+build/
+dist/
+
+# VS Code / PyCharm
+.vscode/
+.idea/
+
+# Cache système
+.DS_Store

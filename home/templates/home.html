@@ -1,0 +1,97 @@
+{% load static i18n %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{% trans "Accueil Hashkao" %}</title>
+    <link rel="stylesheet" href="{% static 'home/home.css' %}">
+    <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}">
+
+</head>
+<body>
+
+    <!-- Barre du haut avec logo et sélecteur -->
+    <div class="header-bar">
+        <img src="{% static 'home/HKO_logo.png' %}" alt="Logo HKO" class="logo-header">
+
+        <div class="language-selector">
+            <form action="{% url 'set_language' %}" method="post">
+                {% csrf_token %}
+                {% get_current_language as LANGUAGE_CODE %}
+                {% get_available_languages as LANGUAGES %}
+                <select name="language" onchange="this.form.submit()">
+                    {% for lang_code, lang_name in LANGUAGES %}
+                        <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>
+                            {{ lang_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>{% trans "Bienvenue sur" %}<br><span class="brand">hashkao.com</span></h1>
+
+        <a href="{% url 'generator:generator_home' %}" class="cta-button bounce">
+            {% trans "Accéder au générateur de mots de passe" %}
+        </a>
+
+        <div class="newsletter">
+            <p>
+              {% trans "Envie d’être prévenu en avant-première ?" %}<br>
+              {% trans "Recevez nos futures applis directement dans votre boîte mail." %}
+            </p>
+            <form id="emailForm" method="post">
+                {% csrf_token %}
+                <input type="email" name="email" placeholder="{% trans 'Votre adresse email' %}" required>
+                <button type="submit">{% trans "S'inscrire" %}</button>
+            </form>
+            <p id="subscribeMessage" style="display:none; color: green; margin-top: 10px;"></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const button = document.querySelector(".cta-button");
+            button.addEventListener("click", function () {
+                button.classList.add("clicked");
+                setTimeout(() => button.classList.remove("clicked"), 300);
+            });
+        });
+    </script>
+    <script>
+    document.getElementById("emailForm").addEventListener("submit", function(e) {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        fetch("{% url 'subscribe_email' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": formData.get("csrfmiddlewaretoken")
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            const msg = document.getElementById("subscribeMessage");
+            if (data.success) {
+                msg.textContent = "Merci ! Vous êtes bien inscrit.";
+                msg.style.display = "block";
+                form.reset();
+            } else {
+                msg.textContent = "Cet email est déjà inscrit ou invalide.";
+                msg.style.display = "block";
+            }
+        })
+        .catch(() => {
+            const msg = document.getElementById("subscribeMessage");
+            msg.textContent = "Une erreur est survenue.";
+            msg.style.display = "block";
+        });
+    });
+    </script>
+
+
+</body>
+</html>

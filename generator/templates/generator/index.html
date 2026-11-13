@@ -1,0 +1,1500 @@
+{% load static %}
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="icon" type="image/x-icon" href="{% static 'favicon.ico' %}" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400&display=swap" rel="stylesheet" />
+
+    {% get_current_language as LANGUAGE_CODE %}
+    <title>{% if LANGUAGE_CODE == 'fr' %}Générateur de mots de passe sécurisé et original | Hashkao
+            {% elif LANGUAGE_CODE == 'en' %}Secure and creative password generator | Hashkao
+            {% elif LANGUAGE_CODE == 'es' %}Generador de contraseñas seguro y creativo | Hashkao
+            {% elif LANGUAGE_CODE == 'de' %}Sicherer und kreativer Passwortgenerator | Hashkao
+            {% elif LANGUAGE_CODE == 'it' %}Generatore di password sicuro e creativo | Hashkao
+            {% elif LANGUAGE_CODE == 'pt' %}Gerador de senhas seguro e criativo | Hashkao
+            {% else %}Générateur de mots de passe | Hashkao
+            {% endif %}</title>
+
+    <meta name="description" content="
+    {% if LANGUAGE_CODE == 'fr' %}Créez des mots de passe sécurisés, aléatoires ou personnalisés grâce à notre générateur intelligent. 100% gratuit et sans pub.
+    {% elif LANGUAGE_CODE == 'en' %}Generate strong, creative and secure passwords for free. No ads, no tracking.
+    {% elif LANGUAGE_CODE == 'es' %}Genera contraseñas seguras y creativas gratis. Sin anuncios, sin seguimiento.
+    {% elif LANGUAGE_CODE == 'de' %}Erstelle sichere und kreative Passwörter kostenlos. Keine Werbung, kein Tracking.
+    {% elif LANGUAGE_CODE == 'it' %}Crea password sicure e originali gratuitamente. Nessuna pubblicità, nessun tracciamento.
+    {% elif LANGUAGE_CODE == 'pt' %}Gere senhas seguras e criativas gratuitamente. Sem anúncios, sem rastreamento.
+    {% else %}Générateur de mots de passe sécurisé, gratuit et sans publicité.
+    {% endif %}" />
+
+    {% get_current_language as LANGUAGE_CODE %}
+    {% if LANGUAGE_CODE == 'fr' %}
+    <meta property="og:title" content="Générateur de mots de passe sécurisé et original | Hashkao" />
+    <meta property="og:description" content="Créez gratuitement des mots de passe forts, originaux et sécurisés. Sans pub, sans traceur." />
+    <meta property="og:url" content="https://hashkao.com/fr/generateur/" />
+    {% elif LANGUAGE_CODE == 'en' %}
+    <meta property="og:title" content="Secure and creative password generator | Hashkao" />
+    <meta property="og:description" content="Create strong, original passwords for free. No ads, no tracking." />
+    <meta property="og:url" content="https://hashkao.com/en/generator/" />
+    {% elif LANGUAGE_CODE == 'es' %}
+    <meta property="og:title" content="Generador de contraseñas seguro y creativo | Hashkao" />
+    <meta property="og:description" content="Crea contraseñas seguras y originales sin anuncios ni rastreo." />
+    <meta property="og:url" content="https://hashkao.com/es/generador/" />
+    {% elif LANGUAGE_CODE == 'de' %}
+    <meta property="og:title" content="Sicherer und kreativer Passwortgenerator | Hashkao" />
+    <meta property="og:description" content="Erstellen Sie sichere und kreative Passwörter ohne Werbung oder Tracking." />
+    <meta property="og:url" content="https://hashkao.com/de/generator/" />
+    {% elif LANGUAGE_CODE == 'it' %}
+    <meta property="og:title" content="Generatore di password sicuro e creativo | Hashkao" />
+    <meta property="og:description" content="Crea password forti e originali. Nessuna pubblicità, nessun tracciamento." />
+    <meta property="og:url" content="https://hashkao.com/it/generatore/" />
+    {% elif LANGUAGE_CODE == 'pt' %}
+    <meta property="og:title" content="Gerador de senhas seguro e criativo | Hashkao" />
+    <meta property="og:description" content="Gere senhas fortes e criativas sem anúncios ou rastreamento." />
+    <meta property="og:url" content="https://hashkao.com/pt/gerador/" />
+    {% endif %}
+    <meta property="og:type" content="website" />
+    
+    <meta property="og:site_name" content="Hashkao" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@hashkao_app" />
+    <meta name="twitter:creator" content="@hashkao_app" />
+    
+    {% get_current_language as LANGUAGE_CODE %}
+    {% if LANGUAGE_CODE == 'fr' %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_fr.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_fr.png" />
+    {% elif LANGUAGE_CODE == 'en' %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_en.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_en.png" />
+    {% elif LANGUAGE_CODE == 'es' %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_es.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_es.png" />
+    {% elif LANGUAGE_CODE == 'de' %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_de.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_de.png" />
+    {% elif LANGUAGE_CODE == 'it' %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_it.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_it.png" />
+    {% elif LANGUAGE_CODE == 'pt' %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_pt.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_pt.png" />
+    {% else %}
+    <meta property="og:image" content="https://hashkao.com/static/og_image_default.png" />
+    <meta name="twitter:image" content="https://hashkao.com/static/og_image_default.png" />
+    {% endif %}
+
+
+    {% if LANGUAGE_CODE == 'fr' %}
+    <meta name="twitter:title" content="Générateur de mots de passe sécurisé et original | Hashkao" />
+    <meta name="twitter:description" content="Créez gratuitement des mots de passe forts, originaux et sécurisés. Sans pub, sans traceur." />
+    {% elif LANGUAGE_CODE == 'en' %}
+    <meta name="twitter:title" content="Secure and creative password generator | Hashkao" />
+    <meta name="twitter:description" content="Create strong, original passwords for free. No ads, no tracking." />
+    {% elif LANGUAGE_CODE == 'es' %}
+    <meta name="twitter:title" content="Generador de contraseñas seguro y creativo | Hashkao" />
+    <meta name="twitter:description" content="Crea contraseñas seguras y originales sin anuncios ni rastreo." />
+    {% elif LANGUAGE_CODE == 'de' %}
+    <meta name="twitter:title" content="Sicherer und kreativer Passwortgenerator | Hashkao" />
+    <meta name="twitter:description" content="Erstellen Sie sichere und kreative Passwörter ohne Werbung oder Tracking." />
+    {% elif LANGUAGE_CODE == 'it' %}
+    <meta name="twitter:title" content="Generatore di password sicuro e creativo | Hashkao" />
+    <meta name="twitter:description" content="Crea password forti e originali. Nessuna pubblicità, nessun tracciamento." />
+    {% elif LANGUAGE_CODE == 'pt' %}
+    <meta name="twitter:title" content="Gerador de senhas seguro e criativo | Hashkao" />
+    <meta name="twitter:description" content="Gere senhas fortes e criativas sem anúncios ou rastreamento." />
+    {% endif %}
+
+
+
+    <link rel="stylesheet" href="{% static 'style.css' %}" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+    <script>
+      (function () {
+        const creativeScreen = document.getElementById("creativeScreen");
+        const randomScreen = document.getElementById("randomScreen");
+        const creativeOptions = document.getElementById("creativeOptions");
+        if (creativeScreen && randomScreen && creativeOptions) {
+          creativeScreen.style.display = "none";
+          creativeOptions.style.display = "none";
+          randomScreen.style.display = "block";
+        }
+      })();
+    </script>
+
+    <!-- Balises hreflang pour le SEO multilingue -->
+    <link rel="alternate" hreflang="fr" href="https://hashkao.com/fr/generateur/" />
+    <link rel="alternate" hreflang="en" href="https://hashkao.com/en/generator/" />
+    <link rel="alternate" hreflang="es" href="https://hashkao.com/es/generador/" />
+    <link rel="alternate" hreflang="de" href="https://hashkao.com/de/generator/" />
+    <link rel="alternate" hreflang="it" href="https://hashkao.com/it/generatore/" />
+    <link rel="alternate" hreflang="pt" href="https://hashkao.com/pt/gerador/" />
+    <link rel="alternate" hreflang="x-default" href="https://hashkao.com/" />
+  </head>
+
+  <body>
+    <!-- Bouton d'ouverture de .side-menu -->
+    <button id="menuToggle" class="menu-button">≡</button>
+
+    <div class="top-bar">
+      <!-- Interrupteur -->
+      <div class="mode-switch-container">
+        <span
+          id="modeLabelLeft"
+          class="mode-label active"
+          data-i18n="mode_random"
+          >Aléatoire</span
+        >
+        <label class="switch">
+          <input type="checkbox" id="modeSwitch" />
+          <span class="slider round"></span>
+        </label>
+        <span id="modeLabelRight" class="mode-label" data-i18n="mode_creative"
+          >Créatif</span
+        >
+      </div>
+
+      <!-- Bouton Accueil à droite du logo -->
+
+      <!-- Sélecteur de langue dynamique -->
+      <div class="language-selector">
+        <a href="/crypto-vibe/" class="home-button">Crypto Vibe</a>
+        <select id="languageSelect">
+          <option value="fr" selected>FR</option>
+          <option value="en">EN</option>
+          <option value="es">ES</option>
+          <option value="de">DE</option>
+          <option value="it">IT</option>
+          <option value="pt">PT</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Menu latéral / Fenêtre d'options -->
+    <div id="sideMenu" class="side-menu hidden">
+      <div class="menu-header">
+        <button id="closeMenu" class="menu-button"></button>
+      </div>
+      <div class="menu-content">
+        <div class="special-button-group">
+          <section class="standalone-button" id="resetAll" data-i18n="new">
+            Nouveau
+          </section>
+          <section
+            class="standalone-button"
+            id="reinitialiser"
+            data-i18n="reset"
+          >
+            Réinitialiser
+          </section>
+          <section class="standalone-button" id="saveFile" data-i18n="export">
+            Exporter
+          </section>
+        </div>
+
+        <!-- 🟢 Affichage & Thème -->
+        <section class="menu-item expandable" id="displaySettings">
+          <div class="menu-title">
+            <span class="title-text" data-i18n="display_theme"
+              ><i class="fas fa-palette"></i> Affichage & Thème</span
+            >
+            <span class="arrow">▼</span>
+          </div>
+          <div class="submenu hidden">
+            <div id="toggleTheme" class="menu-item">Thème sombre</div>
+            <div
+              id="toggleFontSettings"
+              class="menu-item"
+              data-i18n="adjust_text"
+            >
+              Ajuster le texte
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Contenu principal dans un seul app-container -->
+    <div class="app-container">
+      <div class="header">
+        <img
+          src="{% static 'HKO_logo.png' %}"
+          alt="HKO Logo"
+          class="logo-header"
+        />
+
+        <h1 data-i18n="title">Générateur de mot de passe</h1>
+      </div>
+
+      <!-- Écrans du générateur -->
+      <div class="password-screen">
+        <!-- Fond blanc indépendant -->
+        <div class="password-background"></div>
+        <!-- Écran du mode aléatoire -->
+        <div
+          class="password-display random-screen"
+          id="randomScreen"
+          style="display: block"
+        >
+          y8P$%O7Dkg$4
+        </div>
+        <!-- Écran du mode créatif -->
+        <div
+          class="password-display creative-screen"
+          id="creativeScreen"
+          contenteditable="true"
+          style="display: block"
+        ></div>
+        <!-- Écran superposé pour Copier et M -->
+        <div
+          class="overlay-screen copierm-screen"
+          id="copiermScreen"
+          style="display: block"
+        >
+          <button id="generateButton" class="generate-overlay">⟳</button>
+          <button
+            id="anagram-button"
+            class="anagram-overlay"
+            style="display: block"
+            data-i18n="anagram_button"
+          >
+            Anagramme
+          </button>
+          <button
+            id="reverseButton"
+            class="anagram-overlay hidden"
+            data-i18n="reverse_button"
+          >
+            Inverser
+          </button>
+          <button id="copyButton" class="copy-overlay" data-i18n="copy_button">
+            Copier
+          </button>
+          <button id="memoryButton" class="memory-overlay">M</button>
+          <button
+            id="previousCreative"
+            class="nav-overlay"
+            style="display: block"
+          >
+            ⏪
+          </button>
+          <button id="nextCreative" class="nav-overlay" style="display: block">
+            ⏩
+          </button>
+          <div
+            id="copyNotification"
+            class="copy-notification"
+            data-i18n="copy_notification"
+          >
+            Mot de passe copié !
+          </div>
+          <!-- Indicateur de force pour le mode aléatoire -->
+          <div class="strength-meter-container" id="random-strength-meter">
+            <span id="random-strength-text"></span>
+            <div class="strength-meter">
+              <div id="random-strength-bar" class="strength-bar"></div>
+            </div>
+          </div>
+          <!-- Indicateur de force pour le mode créatif -->
+          <div class="strength-meter-container" id="creative-strength-meter">
+            <span id="strength-text"></span>
+            <div class="strength-meter">
+              <div id="strength-bar" class="strength-bar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="below-screen-wrapper">
+        <div class="below-screen-controls-left">
+          <button
+            id="resetButton"
+            class="below-screen-button reset-style"
+            data-i18n="reset_button"
+          >
+            Réinitialiser
+          </button>
+          <button
+            id="importerAlea"
+            class="below-screen-button importer-style"
+            data-i18n="importer_alea"
+          >
+            Importer Aléa
+          </button>
+          <button
+            id="secureWord"
+            class="below-screen-button secure-style"
+            data-i18n="secure_word"
+          >
+            Sécuriser
+          </button>
+        </div>
+        <div class="below-screen-controls">
+          <button
+            id="allCopyButton"
+            class="below-screen-button"
+            data-i18n="all_copy_button"
+          >
+            Tous Copier
+          </button>
+          <button
+            id="exportButton"
+            class="below-screen-button export-style"
+            data-i18n="export_button"
+          >
+            Exporter
+          </button>
+        </div>
+      </div>
+
+      <div class="password-options">
+        <!-- Curseur pour le mode aléatoire -->
+        <div class="length-slider-container random-mode">
+          <label for="length-slider" data-i18n="character_count">
+            Nombre de caractères : <span id="length-value">12</span>
+          </label>
+          <input type="range" id="length-slider" min="4" max="30" value="12" />
+        </div>
+        <!-- Compteur pour le mode créatif -->
+        <div
+          class="creative-length-display creative-mode"
+          style="display: none"
+        >
+          <label data-i18n="character_count">
+            Nombre de caractères : <span id="creative-length-value">0</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Nouvelle fenêtre de réglage sous l’écran principal -->
+      <div id="fontSettingsWindow" class="font-settings-window hidden">
+        <div class="font-settings-content">
+          <h3 data-i18n="adjust_text">Ajuster le texte</h3>
+          <span class="close-window" id="closeFontSettings" title="Fermer"
+            >✖</span
+          >
+          <div class="font-selector">
+            <label for="fontSelect" data-i18n="font_label">Police :</label>
+            <select id="fontSelect">
+              <option value="Roboto" selected>Roboto (défaut)</option>
+              <option value="Arial">Arial</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Courier New">Courier New</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Trebuchet MS">Trebuchet MS</option>
+              <option value="Open Sans">Open Sans</option>
+              <option value="Lato">Lato</option>
+              <option value="Montserrat">Montserrat</option>
+            </select>
+          </div>
+          <div class="font-size-slider">
+            <label for="fontSizeSlider" data-i18n="size_label">
+              Taille : <span id="fontSizeValue">20</span>px
+            </label>
+            <input
+              type="range"
+              id="fontSizeSlider"
+              min="12"
+              max="36"
+              value="20"
+              step="1"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Options supplémentaires -->
+      <div class="top-options">
+        <div class="checkbox-group random-checkboxes">
+          <label data-i18n="avoid_duplicates">
+            <input type="checkbox" id="random-exclure-doublons" /> Éviter les
+            doublons
+          </label>
+          <label data-i18n="exclude_similar_chars">
+            <input type="checkbox" id="random-exclure-similaires" /> Exclure
+            caractères similaires
+          </label>
+        </div>
+        <div class="checkbox-group creative-options hidden">
+          <label data-i18n="avoid_duplicates">
+            <input type="checkbox" id="creative-exclure-doublons-main" /> Éviter
+            les doublons
+          </label>
+          <label data-i18n="exclude_similar_chars">
+            <input type="checkbox" id="creative-exclure-similaires-main" />
+            Exclure caractères similaires
+          </label>
+        </div>
+      </div>
+
+      <!-- Mode Aléatoire -->
+      <div class="options-container random-options" id="randomOptions">
+        <!-- Curseurs -->
+        <div class="slider-group">
+          <label for="minuscules-slider" data-i18n="lowercase"
+            >Minuscules :</label
+          >
+          <input
+            type="range"
+            id="minuscules-slider"
+            min="0"
+            max="100"
+            value="50"
+          />
+          <span id="minuscules-value">50%</span>
+        </div>
+        <div class="slider-group">
+          <label for="majuscules-slider" data-i18n="uppercase"
+            >Majuscules :</label
+          >
+          <input
+            type="range"
+            id="majuscules-slider"
+            min="0"
+            max="100"
+            value="50"
+          />
+          <span id="majuscules-value">50%</span>
+        </div>
+        <div class="slider-group">
+          <label for="chiffres-slider" data-i18n="digits">Chiffres :</label>
+          <input
+            type="range"
+            id="chiffres-slider"
+            min="0"
+            max="100"
+            value="50"
+          />
+          <span id="chiffres-value">50%</span>
+        </div>
+        <div class="slider-group">
+          <label for="speciaux-slider" data-i18n="special_chars"
+            >Caractères :</label
+          >
+          <input
+            type="range"
+            id="speciaux-slider"
+            min="0"
+            max="100"
+            value="50"
+          />
+          <span id="speciaux-value">50%</span>
+        </div>
+
+        <!-- Bouton et fenêtre des caractères spéciaux -->
+        <div class="special-char-config random-mode">
+          <button
+            type="button"
+            id="defineSpecialCharsRandom"
+            class="modern-button"
+            data-i18n="define_special_chars"
+          >
+            Définir les caractères spéciaux
+          </button>
+          <div
+            id="specialCharsWindowRandom"
+            class="special-chars-window hidden"
+          >
+            <div class="toggle-all-modern">
+              <label class="modern-checkbox" data-i18n="toggle_all_chars">
+                <input type="checkbox" id="toggleAllSpecialChars" checked />
+                <span class="checkbox-icon"></span>
+                Tout sélectionner / Désélectionner
+              </label>
+            </div>
+            <div class="random-char-options">
+              <!-- Rangée 1 -->
+              <div class="char-row">
+                <label><input type="checkbox" value="!" checked /> !</label>
+                <label><input type="checkbox" value="@" checked /> @</label>
+                <label><input type="checkbox" value="#" checked /> #</label>
+                <label><input type="checkbox" value="$" checked /> $</label>
+                <label><input type="checkbox" value="%" checked /> %</label>
+                <label><input type="checkbox" value="^" checked /> ^</label>
+                <label><input type="checkbox" value="&" checked /> &</label>
+                <label><input type="checkbox" value="*" checked /> *</label>
+                <label><input type="checkbox" value="(" checked /> (</label>
+                <label><input type="checkbox" value=")" checked /> )</label>
+              </div>
+              <!-- Rangée 2 -->
+              <div class="char-row">
+                <label><input type="checkbox" value="-" checked /> -</label>
+                <label><input type="checkbox" value="_" checked /> _</label>
+                <label><input type="checkbox" value="=" checked /> =</label>
+                <label><input type="checkbox" value="+" checked /> +</label>
+                <label><input type="checkbox" value="{" checked /> {</label>
+                <label><input type="checkbox" value="}" checked /> }</label>
+                <label><input type="checkbox" value="[" checked /> [</label>
+                <label><input type="checkbox" value="]" checked /> ]</label>
+                <label><input type="checkbox" value="|" checked /> |</label>
+                <label><input type="checkbox" value="\" checked /> \</label>
+                <label><input type="checkbox" value=":" checked /> :</label>
+              </div>
+              <!-- Rangée 3 -->
+              <div class="char-row">
+                <label><input type="checkbox" value=";" checked /> ;</label>
+                <label><input type="checkbox" value="'" checked /> '</label>
+                <label><input type="checkbox" value='"' checked /> "</label>
+                <label><input type="checkbox" value="<" checked /> <</label>
+                <label><input type="checkbox" value=">" checked /> ></label>
+                <label><input type="checkbox" value="," checked /> ,</label>
+                <label><input type="checkbox" value="." checked /> .</label>
+                <label><input type="checkbox" value="?" checked /> ?</label>
+                <label><input type="checkbox" value="/" checked /> /</label>
+                <label><input type="checkbox" value="`" checked /> `</label>
+                <label><input type="checkbox" value="~" checked /> ~</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mode Créatif -->
+      <div class="options-container creative-options" id="creativeOptions">
+        <!-- Options de sélection d'insertion dans le mode créatif -->
+        <div class="button-group">
+          <button id="capitalizeFirstButton" data-i18n="capitalize_first">
+            Lettre majuscule
+          </button>
+          <button id="uppercaseButton" data-i18n="all_uppercase">
+            Tout en majuscules
+          </button>
+          <button id="lowercaseButton" data-i18n="all_lowercase">
+            Tout en minuscules
+          </button>
+        </div>
+        <div class="common-container">
+          <!-- ✅ Écran commun pour les 3 boîtes -->
+          <div class="common-screen">
+            <div
+              id="selectedWordDisplay"
+              class="selected-word-display"
+              data-i18n="no_word_selected"
+            >
+              Aucun mot sélectionné pour l'instant.
+            </div>
+
+            <!-- ✅ Zone des modes d'insertion -->
+            <div class="insert-section">
+              <!-- ✅ Bouton principal d'insertion (toujours visible) -->
+              <div class="insert-controls">
+                <div class="box-selector">
+                  <select id="boxType">
+                    <option value="wordBox" data-i18n="word_box">
+                      Boîte à Mots Aléatoire
+                    </option>
+                    <option value="generatorBox" data-i18n="generator_box">
+                      Générateur de Mots
+                    </option>
+                    <option value="phraseBox" data-i18n="phrase_box">
+                      Générateur de Phrases
+                    </option>
+                  </select>
+                </div>
+                <button
+                  id="insertButtonInterface"
+                  class="insert-button"
+                  data-i18n="insert"
+                >
+                  ➕ Insérer
+                </button>
+              </div>
+
+              <!-- ✅ Groupe des options d'insertion (caché par défaut) -->
+              <div class="button-group hidden" id="insertButtonsGroup">
+                <button id="insertLeftButton" data-i18n="insert_left">
+                  Gauche
+                </button>
+                <button id="insertRightButton" data-i18n="insert_right">
+                  Droite
+                </button>
+                <button id="insertMiddleButton" data-i18n="insert_middle">
+                  Milieu
+                </button>
+                <button id="insertBothButton" data-i18n="insert_both">
+                  Deux bouts
+                </button>
+                <button id="addSeparatorButton" data-i18n="separator">
+                  Séparateur
+                </button>
+                <!-- Fenêtre modale pour le choix des séparateurs -->
+                <div id="separatorModal" class="separator-modal hidden">
+                  <h3 data-i18n="choose_separator">Choisissez un séparateur</h3>
+                  <div class="separator-options">
+                    <!-- Ligne 1 -->
+                    <div class="separator-row">
+                      <label
+                        ><input
+                          type="checkbox"
+                          value=" "
+                          class="separator-checkbox"
+                        />
+                        <span>␣</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="-"
+                          class="separator-checkbox"
+                        />
+                        <span>-</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="_"
+                          class="separator-checkbox"
+                        />
+                        <span>_</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="."
+                          class="separator-checkbox"
+                        />
+                        <span>.</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="|"
+                          class="separator-checkbox"
+                        />
+                        <span>|</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="/"
+                          class="separator-checkbox"
+                        />
+                        <span>/</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="*"
+                          class="separator-checkbox"
+                        />
+                        <span>*</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="+"
+                          class="separator-checkbox"
+                        />
+                        <span>+</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="="
+                          class="separator-checkbox"
+                        />
+                        <span>=</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="%"
+                          class="separator-checkbox"
+                        />
+                        <span>%</span></label
+                      >
+                    </div>
+                    <!-- Ligne 2 -->
+                    <div class="separator-row">
+                      <label
+                        ><input
+                          type="checkbox"
+                          value=";"
+                          class="separator-checkbox"
+                        />
+                        <span>;</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value=":"
+                          class="separator-checkbox"
+                        />
+                        <span>:</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="#"
+                          class="separator-checkbox"
+                        />
+                        <span>#</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="&"
+                          class="separator-checkbox"
+                        />
+                        <span>&</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="("
+                          class="separator-checkbox"
+                        />
+                        <span>(</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value=")"
+                          class="separator-checkbox"
+                        />
+                        <span>)</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="<"
+                          class="separator-checkbox"
+                        />
+                        <span><</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value=">"
+                          class="separator-checkbox"
+                        />
+                        <span>></span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="?"
+                          class="separator-checkbox"
+                        />
+                        <span>?</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value=","
+                          class="separator-checkbox"
+                        />
+                        <span>,</span></label
+                      >
+                    </div>
+                    <!-- Ligne 3 -->
+                    <div class="separator-row">
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="^"
+                          class="separator-checkbox"
+                        />
+                        <span>^</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="@"
+                          class="separator-checkbox"
+                        />
+                        <span>@</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="$"
+                          class="separator-checkbox"
+                        />
+                        <span>$</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="!"
+                          class="separator-checkbox"
+                        />
+                        <span>!</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value='"'
+                          class="separator-checkbox"
+                        />
+                        <span>"</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="'"
+                          class="separator-checkbox"
+                        />
+                        <span>'</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="`"
+                          class="separator-checkbox"
+                        />
+                        <span>`</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="~"
+                          class="separator-checkbox"
+                        />
+                        <span>~</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="["
+                          class="separator-checkbox"
+                        />
+                        <span>[</span></label
+                      >
+                      <label
+                        ><input
+                          type="checkbox"
+                          value="]"
+                          class="separator-checkbox"
+                        />
+                        <span>]</span></label
+                      >
+                    </div>
+                  </div>
+                  <button id="validateSeparator" data-i18n="validate">
+                    Valider
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Boîte à mots -->
+          <div class="box-container" id="wordBox">
+            <div class="creative-sliders-container">
+              <!-- Petit écran pour afficher le mot généré -->
+              <div
+                class="generated-word-display"
+                id="generatedWordDisplay"
+              ></div>
+              <!-- Options de contrôle -->
+              <div class="checkbox-group">
+                <label>
+                  <input type="checkbox" id="creative-exclure-doublons" />
+                  <span data-i18n="avoid_duplicates_creative"
+                    >Éviter les doublons</span
+                  >
+                </label>
+                <label>
+                  <input type="checkbox" id="creative-exclure-similaires" />
+                  <span data-i18n="exclude_similar_chars_creative"
+                    >Exclure caractères similaires</span
+                  >
+                </label>
+              </div>
+
+              <!-- Bouton Anagramme sous la boîte à mots -->
+              <div class="button-box">
+                <button
+                  type="button"
+                  id="anagramButtonGenerated"
+                  data-i18n="anagram_button_generated"
+                >
+                  Anagramme
+                </button>
+                <button
+                  type="button"
+                  id="randomizeGeneratedWord"
+                  data-i18n="randomize_word"
+                >
+                  Aléatoire
+                </button>
+              </div>
+
+              <!-- Curseurs pour ajuster les caractères -->
+              <div class="creative-slider-group">
+                <label for="creative-minuscules" data-i18n="lowercase_creative"
+                  >Minuscules :</label
+                >
+                <input
+                  type="range"
+                  id="creative-minuscules"
+                  min="0"
+                  max="10"
+                  value="5"
+                />
+                <span
+                  id="creative-minuscules-value"
+                  data-i18n="characters_count"
+                  data-i18n-args='{"count": 5}'
+                  >5 caractères</span
+                >
+              </div>
+              <div class="creative-slider-group">
+                <label for="creative-majuscules" data-i18n="uppercase_creative"
+                  >Majuscules :</label
+                >
+                <input
+                  type="range"
+                  id="creative-majuscules"
+                  min="0"
+                  max="10"
+                  value="5"
+                />
+                <span
+                  id="creative-majuscules-value"
+                  data-i18n="characters_count"
+                  data-i18n-args='{"count": 5}'
+                  >5 caractères</span
+                >
+              </div>
+              <div class="creative-slider-group">
+                <label for="creative-chiffres" data-i18n="digits_creative"
+                  >Chiffres :</label
+                >
+                <input
+                  type="range"
+                  id="creative-chiffres"
+                  min="0"
+                  max="10"
+                  value="5"
+                />
+                <span
+                  id="creative-chiffres-value"
+                  data-i18n="characters_count"
+                  data-i18n-args='{"count": 5}'
+                  >5 caractères</span
+                >
+              </div>
+              <div class="creative-slider-group">
+                <label
+                  for="creative-speciaux"
+                  data-i18n="special_chars_creative"
+                  >Caractères :</label
+                >
+                <input
+                  type="range"
+                  id="creative-speciaux"
+                  min="0"
+                  max="10"
+                  value="5"
+                />
+                <span
+                  id="creative-speciaux-value"
+                  data-i18n="characters_count"
+                  data-i18n-args='{"count": 5}'
+                  >5 caractères</span
+                >
+              </div>
+              <!-- Conteneur aligné pour les boutons -->
+              <div class="insert-config-container">
+                <button
+                  type="button"
+                  id="defineSpecialChars"
+                  data-i18n="define_special_chars_creative"
+                >
+                  Définir les caractères spéciaux
+                </button>
+              </div>
+
+              <!-- Bouton insérer -->
+              <button id="insertWordBox" class="hidden-insert">
+                ➕ Insérer
+              </button>
+            </div>
+          </div>
+
+          <div id="specialCharsWindow" class="special-chars-window hidden">
+            <span class="close-window" title="Fermer">×</span>
+            <label>
+              <input type="checkbox" id="toggleAllSpecialCharsCreative" />
+              <span data-i18n="toggle_all_chars_creative"
+                >Tout sélectionner / Désélectionner</span
+              >
+            </label>
+            <br />
+            <div class="char-options">
+              <!-- Ligne 1 : 11 caractères (! à -) -->
+              <div class="char-row-creative">
+                <label><input type="checkbox" value="!" checked /> !</label>
+                <label><input type="checkbox" value="@" checked /> @</label>
+                <label><input type="checkbox" value="#" checked /> #</label>
+                <label><input type="checkbox" value="$" checked /> $</label>
+                <label><input type="checkbox" value="%" checked /> %</label>
+                <label><input type="checkbox" value="^" checked /> ^</label>
+                <label><input type="checkbox" value="&" checked /> &</label>
+                <label><input type="checkbox" value="*" checked /> *</label>
+                <label><input type="checkbox" value="(" checked /> (</label>
+                <label><input type="checkbox" value=")" checked /> )</label>
+                <label><input type="checkbox" value="-" checked /> -</label>
+              </div>
+              <!-- Ligne 2 : 11 caractères (_ à ;) -->
+              <div class="char-row-creative">
+                <label><input type="checkbox" value="_" checked /> _</label>
+                <label><input type="checkbox" value="=" checked /> =</label>
+                <label><input type="checkbox" value="+" checked /> +</label>
+                <label><input type="checkbox" value="{" checked /> {</label>
+                <label><input type="checkbox" value="}" checked /> }</label>
+                <label><input type="checkbox" value="[" checked /> [</label>
+                <label><input type="checkbox" value="]" checked /> ]</label>
+                <label><input type="checkbox" value="|" checked /> |</label>
+                <label><input type="checkbox" value="\" checked /> \</label>
+                <label><input type="checkbox" value=":" checked /> :</label>
+                <label><input type="checkbox" value=";" checked /> ;</label>
+              </div>
+              <!-- Ligne 3 : 11 caractères (' à ~) -->
+              <div class="char-row-creative">
+                <label><input type="checkbox" value="'" checked /> '</label>
+                <label><input type="checkbox" value='"' checked /> "</label>
+                <label><input type="checkbox" value="<" checked /> <</label>
+                <label><input type="checkbox" value=">" checked /> ></label>
+                <label><input type="checkbox" value="," checked /> ,</label>
+                <label><input type="checkbox" value="." checked /> .</label>
+                <label><input type="checkbox" value="?" checked /> ?</label>
+                <label><input type="checkbox" value="/" checked /> /</label>
+                <label><input type="checkbox" value="`" checked /> `</label>
+                <label><input type="checkbox" value="~" checked /> ~</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Générateur de mots -->
+          <div class="box-container" id="generatorBox">
+            <div class="word-generator">
+              <div id="wordList" class="word-list hidden">
+                <p>Aucun mot généré pour l’instant.</p>
+              </div>
+              <div class="word-options">
+                <div class="option-group">
+                  <label for="lang-select" data-i18n="language_label"
+                    >Langue :</label
+                  >
+                  <select id="lang-select">
+                    <option value="fr" data-i18n="lang_fr">Français</option>
+                    <option value="en" data-i18n="lang_en">Anglais</option>
+                    <option value="es" data-i18n="lang_es">Espagnol</option>
+                    <option value="de" data-i18n="lang_de">Allemand</option>
+                    <option value="it" data-i18n="lang_it">Italien</option>
+                  </select>
+                </div>
+                <div class="option-group">
+                  <label for="prefix-input" data-i18n="prefix_label"
+                    >Préfixe (optionnel) :</label
+                  >
+                  <input
+                    type="text"
+                    id="prefix-input"
+                    data-i18n-placeholder="prefix_placeholder"
+                    placeholder="ex. ab"
+                    autofocus
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="option-group">
+                  <label for="length-input" data-i18n="length_label"
+                    >Longueur (3-20) :</label
+                  >
+                  <input
+                    type="number"
+                    id="length-input"
+                    min="3"
+                    max="20"
+                    data-i18n-placeholder="length_placeholder"
+                    placeholder="Long. ?"
+                  />
+                </div>
+                <div class="option-group button-row">
+                  <button
+                    type="button"
+                    id="previousWord"
+                    data-i18n="previous_word"
+                  >
+                    ⏪ Précédent
+                  </button>
+                  <button
+                    type="button"
+                    id="generateWords"
+                    data-i18n="generate_words"
+                  >
+                    🔄 Générer
+                  </button>
+                  <button id="nextWord" data-i18n="next_word">
+                    ⏩ Suivant
+                  </button>
+                </div>
+              </div>
+              <button id="insertGeneratorBox" class="hidden-insert hidden">
+                ➕ Insérer
+              </button>
+            </div>
+          </div>
+
+          <!-- Générateur de phrases -->
+          <div class="box-container hidden" id="phraseBox">
+            <div class="phrase-generator">
+              <div class="word-options">
+                <div class="option-group">
+                  <label for="phrase-lang-select" data-i18n="language_label"
+                    >Langue :</label
+                  >
+                  <select id="phrase-lang-select">
+                    <option value="fr" data-i18n="lang_fr">Français</option>
+                    <option value="en" data-i18n="lang_en">Anglais</option>
+                    <option value="es" data-i18n="lang_es">Espagnol</option>
+                    <option value="de" data-i18n="lang_de">Allemand</option>
+                    <option value="it" data-i18n="lang_it">Italien</option>
+                    <option value="mix" data-i18n="lang_mix">Mélanger</option>
+                  </select>
+                </div>
+                <div class="option-group">
+                  <label for="word-count-input" data-i18n="word_count_label"
+                    >Nombre de mots (3-10) :</label
+                  >
+                  <input
+                    type="number"
+                    id="word-count-input"
+                    min="3"
+                    max="10"
+                    data-i18n-placeholder="word_count_placeholder"
+                    placeholder="Facultatif"
+                  />
+                </div>
+                <div class="option-group special-chars-group">
+                  <input
+                    type="checkbox"
+                    id="use-special-chars"
+                    name="use_special_chars"
+                  />
+                  <button
+                    id="toggle-special-chars"
+                    data-i18n="use_special_chars"
+                  >
+                    Avec caractères spéciaux
+                  </button>
+                </div>
+                <div class="option-group">
+                  <p id="generatedPhrase" class="hidden">
+                    Votre phrase apparaîtra ici...
+                  </p>
+                </div>
+                <div class="option-group button-row">
+                  <button id="previousPhrase" data-i18n="previous_phrase">
+                    ⏪ Précédent
+                  </button>
+                  <button id="generatePhrase" data-i18n="generate_phrase">
+                    🔄 Générer une phrase
+                  </button>
+                  <button id="nextPhrase" data-i18n="next_phrase">
+                    ⏩ Suivant
+                  </button>
+                </div>
+              </div>
+              <button id="insertPhraseBox" class="hidden-insert hidden">
+                ➕ Insérer
+              </button>
+            </div>
+          </div>
+
+          <!-- Fenêtre des caractères spéciaux (déplacée hors de #phraseBox) -->
+          <div
+            class="special-chars-container hidden"
+            id="specialCharsContainer"
+          >
+            <div class="special-chars-header">
+              <h2 data-i18n="select_special_chars">Choisir les caractères :</h2>
+              <span class="close-btn" id="closeSpecialChars">✖</span>
+            </div>
+            <div class="special-chars-list">
+              <label
+                ><input type="checkbox" name="special_chars" value="!" />
+                !</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="@" />
+                @</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="#" />
+                #</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="$" />
+                $</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="%" />
+                %</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="^" />
+                ^</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="&" />
+                &</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="*" />
+                *</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="(" />
+                (</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value=")" />
+                )</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="-" />
+                -</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="_" />
+                _</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="=" />
+                =</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="+" />
+                +</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="{" />
+                {</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="}" />
+                }</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="[" />
+                [</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="]" />
+                ]</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="|" />
+                |</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="\" />
+                \</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value=":" />
+                :</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value=";" />
+                ;</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="'" />
+                '</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value='"' />
+                "</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="<" />
+                <</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value=">" />
+                ></label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="," />
+                ,</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="." />
+                .</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="?" />
+                ?</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="/" />
+                /</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="`" />
+                `</label
+              >
+              <label
+                ><input type="checkbox" name="special_chars" value="~" />
+                ~</label
+              >
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Page d'exportation (masquée par défaut) -->
+      <div id="exportPage" class="hidden">
+        <!-- Bouton Retour avec flèche -->
+        <button
+          id="returnToGeneratorButton"
+          class="back-button"
+          data-i18n="return_to_generator"
+        >
+          ← Retour
+        </button>
+        <h2 data-i18n="export_passwords">Exporter vos mots de passe</h2>
+        <div id="exportContent">
+          <!-- Liste des mots de passe mémorisés affichée ici -->
+          <div id="memoryDisplay" class="memory-display"></div>
+        </div>
+        <textarea
+          id="comments"
+          data-i18n-placeholder="export_comments_placeholder"
+          placeholder="Ajoutez vos commentaires ici..."
+          rows="5"
+        ></textarea>
+        <!-- Bouton Enregistrer en bas à droite -->
+        <div class="export-buttons">
+          <button
+            id="saveToFileButton"
+            class="save-button"
+            data-i18n="save_to_file"
+          >
+            Enregistrer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <button id="readmeButton" class="readme-btn-fixed">README</button>
+    <div id="readmeOverlay" class="modal-overlay hidden"></div>
+
+    <div id="readmeModal" class="modal hidden">
+      <div class="modal-content" id="readmeContent">
+        <div class="modal-header" id="readmeHeader">
+          <h2 data-i18n="readme.title">Mode d’emploi</h2>
+          <span class="close">&times;</span>
+        </div>
+        <div class="modal-text">
+          <p data-i18n="readme.intro">
+            Bienvenue sur Hashkao.com ! Ce générateur de mots de passe vous
+            propose deux modes : aléatoire et créatif.
+          </p>
+
+          <h3 data-i18n="readme.randomModeTitle">Mode aléatoire</h3>
+          <p data-i18n="readme.randomModeDescription">
+            En mode aléatoire, un mot de passe est généré automatiquement avec
+            12 caractères par défaut. Vous pouvez :
+          </p>
+          <ul>
+            <li data-i18n="readme.random.generateNew">
+              Générer un nouveau mot avec le bouton ⟳.
+            </li>
+            <li data-i18n="readme.random.changeLength">
+              Modifier le nombre de caractères avec le curseur (jusqu'à 30).
+            </li>
+            <li data-i18n="readme.random.anagram">
+              Générer des anagrammes du mot de passe.
+            </li>
+            <li data-i18n="readme.random.options">
+              Activer/désactiver les options : éviter les doublons, exclure les
+              caractères similaires.
+            </li>
+            <li data-i18n="readme.random.sliders">
+              Ajuster les proportions de minuscules, majuscules, chiffres, et
+              caractères spéciaux avec les curseurs.
+            </li>
+            <li data-i18n="readme.random.defineSpecials">
+              Personnaliser les caractères spéciaux utilisés (32 proposés).
+            </li>
+            <li data-i18n="readme.random.copy">
+              Copier le mot de passe généré.
+            </li>
+            <li data-i18n="readme.random.memorize">
+              Mémoriser jusqu'à 9 mots de passe et exporter en fichier texte
+              (.txt).
+            </li>
+          </ul>
+
+          <h3 data-i18n="readme.creativeModeTitle">Mode créatif</h3>
+          <p data-i18n="readme.creativeModeDescription">
+            Le mode créatif permet de partir d'une base manuelle ou d'importer
+            un mot du mode aléatoire pour l'ajuster. Vous pouvez :
+          </p>
+          <ul>
+            <li data-i18n="readme.creative.importRandom">
+              Importer un mot du mode aléatoire.
+            </li>
+            <li data-i18n="readme.creative.editManually">
+              Modifier manuellement votre mot de passe (ajouter/supprimer des
+              lettres).
+            </li>
+            <li data-i18n="readme.creative.invert">Inverser le mot affiché.</li>
+            <li data-i18n="readme.creative.anagram">
+              Générer des anagrammes du mot affiché.
+            </li>
+            <li data-i18n="readme.creative.capitalize">
+              Mettre en majuscule une lettre après l'autre (ou en minuscule avec
+              double-clic).
+            </li>
+            <li data-i18n="readme.creative.allCapsAllLower">
+              Tout passer en majuscule ou en minuscule en un clic.
+            </li>
+            <li data-i18n="readme.creative.secure">
+              Sécuriser automatiquement votre mot en renforçant sa structure.
+            </li>
+            <li data-i18n="readme.creative.insertFromBoxes">
+              Insérer des mots aléatoires, des mots existants ou des phrases
+              générées selon plusieurs modes (gauche, droite, milieu...)
+            </li>
+          </ul>
+
+          <h3 data-i18n="readme.additionalFeaturesTitle">
+            Autres fonctionnalités
+          </h3>
+          <ul>
+            <li data-i18n="readme.additional.themes">
+              Changer le thème sombre / clair pour l'interface.
+            </li>
+            <li data-i18n="readme.additional.fontAdjust">
+              Ajuster la police et la taille du mot de passe avec la fenêtre
+              flottante "Ajuster le texte".
+            </li>
+            <li data-i18n="readme.additional.export">
+              Exporter vos créations pour les conserver.
+            </li>
+            <li data-i18n="readme.additional.newSession">
+              Réinitialiser pour repartir sur une session vierge.
+            </li>
+          </ul>
+        </div>
+
+        <div class="resize-handle"></div>
+      </div>
+    </div>
+
+    <!-- Chargement du script JavaScript -->
+    <script src="{% static 'script.js' %}"></script>
+  </body>
+</html>

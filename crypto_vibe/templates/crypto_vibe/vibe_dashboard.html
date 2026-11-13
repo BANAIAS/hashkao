@@ -1,0 +1,566 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Hashkao – Crypto Vibe (sentiment & prévisions 1 h) + HKO Generator</title>
+  <meta name="description" content="Crypto Vibe suit le sentiment du marché et les actus crypto (source : Reddit). Évolution 24 h & prévision 1 h pour 10 cryptos majeures. Accédez au générateur HKO.">
+  <link rel="canonical" href="https://hashkao.com/">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Hashkao">
+  <meta property="og:title" content="Hashkao – Crypto Vibe (sentiment & prévisions 1 h) + HKO Generator">
+  <meta property="og:description" content="Crypto Vibe suit le sentiment du marché et les actus crypto (source : Reddit). Évolution 24 h et prévision horaire pour 10 cryptos majeures. Accédez aussi à notre générateur de mots de passe (HKO).">
+
+
+  <meta property="og:url" content="https://hashkao.com/">
+  <meta property="og:locale" content="fr_FR">
+  <!-- <meta property="og:image" content="https://hashkao.com/static/og/cover.png"> -->
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Hashkao – Crypto Vibe (sentiment & prévisions 1 h) + HKO Generator">
+  <meta name="twitter:description" content="Crypto Vibe suit le sentiment du marché et les actus crypto (source : Reddit). Évolution 24 h et prévision horaire pour 10 cryptos majeures. Accédez aussi à notre générateur de mots de passe (HKO).">
+  <!-- <meta name="twitter:image" content="https://hashkao.com/static/og/cover.png"> -->
+
+  <link rel="icon" href="{% static 'crypto_vibe/favicon.ico' %}?v=20250820">
+  <link rel="icon" type="image/png" sizes="32x32" href="{% static 'crypto_vibe/favicon-32x32.png' %}?v=20250820">
+  <link rel="icon" type="image/png" sizes="16x16" href="{% static 'crypto_vibe/favicon-16x16.png' %}?v=20250820">
+  <link rel="apple-touch-icon" sizes="180x180" href="{% static 'crypto_vibe/apple-touch-icon.png' %}?v=20250820">
+
+
+  <link rel="stylesheet" href="{% static 'crypto_vibe/crypto-vibe-style.css' %}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- JSON-LD (SEO) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://hashkao.com/#website",
+      "url": "https://hashkao.com/",
+      "name": "Hashkao – Crypto Vibe",
+      "inLanguage": "fr-FR",
+      "description": "Suivez le sentiment du marché et les actus crypto (Reddit, bientôt X) avec Crypto Vibe : évolution 24 h et prévision horaire pour 10 cryptos majeures. Accédez aussi à notre générateur de mots de passe (HKO).",
+      "publisher": { "@id": "https://hashkao.com/#organization" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://hashkao.com/#organization",
+      "name": "Hashkao",
+      "url": "https://hashkao.com/",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://hashkao.com/static/crypto_vibe/hko-crypto-logo.png",
+        "width": 512,
+        "height": 512
+      }
+      /* "sameAs": ["https://twitter.com/toncompte", "https://github.com/tonorg"] */
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://hashkao.com/#webpage",
+      "url": "https://hashkao.com/",
+      "name": "Crypto Vibe – sentiment & prévisions 1 h",
+      "isPartOf": { "@id": "https://hashkao.com/#website" },
+      "inLanguage": "fr-FR",
+      "description": "Suivez le sentiment du marché et les actus crypto (Reddit, bientôt X) avec Crypto Vibe : évolution 24 h et prévision horaire pour 10 cryptos majeures. Accédez aussi à notre générateur de mots de passe (HKO)."
+    }
+  ]
+}
+</script>
+</head>
+
+<body class="dashboard-body">
+    <div class="dashboard-header">
+  <img src="{% static 'crypto_vibe/hko-crypto-logo.png' %}" alt="HKO Crypto" class="logo">
+
+  <!-- SLOT CENTRAL -->
+  <div class="header-center">
+    <div class="promo-cta" aria-live="polite">
+      <a href="{% url 'generator:generator_home' %}" class="promo-cta__link"
+         title="Accéder au générateur de mots de passe">
+        <img
+          src="{% static 'crypto_vibe/hko-generator-badge.png' %}"
+          srcset="{% static 'crypto_vibe/hko-generator-badge@2x.png' %} 2x"
+          alt="HKO Generator" class="promo-cta__logo" width="96" height="48">
+        <span class="promo-cta__text">Découvrez notre générateur de mots de passe sécurisé</span>
+        <span class="promo-cta__shine" aria-hidden="true"></span>
+      </a>
+    </div>
+  </div> <!-- 👈 FIN .header-center -->
+
+  <div class="subscription">
+    <button type="button" class="sub-btn" data-open-sub
+      title="S'abonner" aria-haspopup="dialog" aria-controls="subscribe-modal">➕</button>
+    <!-- <a href="/notifications/" class="notif-btn" title="Notifications">🔔</a> -->
+  </div>
+</div>
+
+    <!-- END: Dashboard Header -->
+
+    <div class="ticker-wrap">
+        <div class="ticker-inner" id="ticker-inner">
+            <div id="ticker-track" class="ticker-track"></div>
+            <div id="ticker-track-clone" class="ticker-track"></div>
+        </div>
+    </div>
+
+    <!-- START: Crypto Horizontal Cards Section -->
+    <div class="scroll-shell">
+        <!-- Flèche gauche -->
+        <button class="scroll-btn left"
+                type="button"
+                aria-label="Défiler vers la gauche"
+                onclick="scrollCards(-1)"></button>
+
+        <div class="horizontal-scroll-container">
+            <!-- 1. Bitcoin Card -->
+            <div class="crypto-card" data-crypto="bitcoin" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/btc.svg' %}" alt="Bitcoin Logo" class="crypto-logo">
+                    <h2 class="crypto-name">Bitcoin</h2>
+                    <div class="crypto-price" id="price-bitcoin">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <!-- Reddit -->
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-bitcoin-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-bitcoin-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-bitcoin-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 2. Ethereum Card -->
+            <div class="crypto-card" data-crypto="ethereum" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/ethereum.svg' %}" alt="Ethereum Logo" class="crypto-logo">
+                    <h2 class="crypto-name">Ethereum</h2>
+                    <div class="crypto-price" id="price-ethereum">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <!-- Reddit -->
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-ethereum-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-ethereum-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-ethereum-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 3. Ripple Card -->
+            <div class="crypto-card" data-crypto="xrp" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/xrp.svg' %}" alt="XRP Logo" class="crypto-logo">
+                    <h2 class="crypto-name">XRP</h2>
+                    <div class="crypto-price" id="price-xrp">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <!-- Reddit -->
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-xrp-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-xrp-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-xrp-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 4. Tether Card -->
+            <div class="crypto-card" data-crypto="tether" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/tether.svg' %}" alt="Tether Logo" class="crypto-logo">
+                    <h2 class="crypto-name">Tether</h2>
+                    <div class="crypto-price" id="price-tether">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <!-- Reddit -->
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-tether-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-tether-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-tether-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 5. BNB Card -->
+            <div class="crypto-card" data-crypto="bnb" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/bnb.svg' %}" alt="BNB Logo" class="crypto-logo">
+                    <h2 class="crypto-name">BNB</h2>
+                    <div class="crypto-price" id="price-bnb">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-bnb-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-bnb-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-bnb-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 6. Solana Card -->
+            <div class="crypto-card" data-crypto="solana" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/solana.svg' %}" alt="Solana Logo" class="crypto-logo">
+                    <h2 class="crypto-name">Solana</h2>
+                    <div class="crypto-price" id="price-solana">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-solana-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-solana-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-solana-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 7. USDC Card -->
+            <div class="crypto-card" data-crypto="usdc" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/usd.svg' %}" alt="USDC Logo" class="crypto-logo">
+                    <h2 class="crypto-name">USDC</h2>
+                    <div class="crypto-price" id="price-usdc">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-usdc-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-usdc-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-usdc-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 8. Dogecoin Card -->
+            <div class="crypto-card" data-crypto="dogecoin" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/dogecoin.svg' %}" alt="Dogecoin Logo" class="crypto-logo">
+                    <h2 class="crypto-name">Dogecoin</h2>
+                    <div class="crypto-price" id="price-dogecoin">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-dogecoin-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-dogecoin-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-dogecoin-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 9. TRON Card -->
+            <div class="crypto-card" data-crypto="tron" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/tron.svg' %}" alt="TRON Logo" class="crypto-logo">
+                    <h2 class="crypto-name">TRON</h2>
+                    <div class="crypto-price" id="price-tron">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-tron-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-tron-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-tron-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+            <!-- 10. Cardano Card -->
+            <div class="crypto-card" data-crypto="cardano" onclick="selectCard(this)">
+                <div class="card-top">
+                    <img src="{% static 'crypto_vibe/img/logos/cardano.svg' %}" alt="Cardano Logo" class="crypto-logo">
+                    <h2 class="crypto-name">Cardano</h2>
+                    <div class="crypto-price" id="price-cardano">Chargement…</div>
+                </div>
+                <div class="vibe-rotator">
+                    <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                        <span class="vibe-label">Reddit:</span>
+                        <span id="vibe-cardano-reddit" class="sentiment-value">Chargement…</span>
+                        <span id="score-cardano-reddit" class="sentiment-score"></span>
+                        <span class="arrow-icon" id="arrow-cardano-reddit"></span>
+
+                        <!-- chip **dans** l'item reddit -->
+                        <span class="source-chip">
+                            <span class="src-time">+1h</span>
+                            <span class="src-sep">:</span>
+                            <span class="src-price">—</span>
+                            <span class="src-mid">·</span>
+                            <span class="src-conf">—</span>
+                        </span>
+                    </div>
+                </div>
+                <!-- 🔵 Bloc HKO unique, par carte -->
+                <div class="prediction-hko">
+                    <div class="prediction-chip">
+                        <span class="prediction-label">Prévision à</span>
+                        <span class="prediction-time">—:—</span>
+                        <span class="sep">:</span>
+                        <span class="prediction-price">—</span>
+                    </div>
+                    <div class="prediction-confidence-line">
+                        Confiance : <span class="prediction-confidence">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flèche droite -->
+        <button class="scroll-btn right"
+                type="button"
+                aria-label="Défiler vers la droite"
+                onclick="scrollCards(1)"></button>
+    </div>
+    <!-- END: Crypto Horizontal Cards Section -->
+
+    <!-- START: Price Chart -->
+    <div class="chart-container">
+        <div class="chart-loading" id="chart-loading">Chargement de la courbe...</div>
+        <canvas id="price-chart" width="400" height="200"></canvas>
+    </div>
+    <!-- END: Price Chart -->
+
+    <!-- FOOTER NEWS TICKERS -->
+    <div class="footer-tickers">
+        <div class="ticker-row ticker-row--white">
+            <div class="ticker-content-fixed"></div>
+            <!-- CTA HKO Generator (clic → générateur) -->
+            <a href="{% url 'generator:generator_home' %}"
+            class="footer-generator-cta"
+            title="Accéder au générateur de mots de passe">
+            <img
+            src="{% static 'crypto_vibe/hko-logo.png' %}"
+            srcset="{% static 'crypto_vibe/hko-logo@2x.png' %} 2x"
+            alt="HKO"
+            class="footer-generator-cta__logo">
+            <span class="footer-generator-cta__txt">Generator</span></a>
+        </div>
+        <div class="ticker-row ticker-row--black">
+            <div class="ticker-content"></div>
+        </div>
+    </div>
+
+    <!-- END: News Tickers -->
+
+    <!-- Modal Abonnement -->
+    <div id="subscribe-modal" class="sub-modal" aria-hidden="true">
+        <div class="sub-modal__backdrop" data-close></div>
+        <div class="sub-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sub-title">
+            <button class="sub-modal__close" type="button" title="Fermer" data-close>×</button>
+            <h3 id="sub-title" class="sub-modal__title">S’abonner à Hashkao</h3>
+            <p class="sub-modal__text">Recevez nos actus et futures fonctionnalités.</p>
+
+            <form id="subscribe-form" class="sub-form" data-endpoint="{% url 'crypto_vibe:subscribe' %}">
+                {% csrf_token %}
+                <!-- honeypot anti-bot -->
+                <input type="text" name="website" autocomplete="off" tabindex="-1"
+                       style="position:absolute;left:-9999px;height:0;width:0;opacity:0" aria-hidden="true">
+                <input type="hidden" name="source" value="header_plus">
+
+                <label class="sub-form__row">
+                    <input type="email" name="email" class="sub-form__input" placeholder="votre@email.com" required>
+                </label>
+
+                <button class="sub-form__btn" type="submit">S’abonner</button>
+                <div class="sub-form__msg" id="sub-msg" role="status" aria-live="polite"></div>
+
+                <p class="sub-form__legal">
+                    En vous inscrivant, vous acceptez de recevoir nos emails. Vous pourrez vous désabonner à tout moment.
+                </p>
+            </form>
+        </div>
+    </div>
+    <script src="{% static 'crypto_vibe/crypto-vibe-script.js' %}"></script>
+</body>
+</html>

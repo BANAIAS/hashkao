@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crypto-Vibe - {{ crypto|capfirst }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'crypto_vibe/crypto-vibe-style.css' %}">
+</head>
+<body class="dashboard-body">
+    <!-- START: Dashboard Header -->
+    <div class="dashboard-header">
+        <img src="{% static 'crypto_vibe/hko-crypto-logo.png' %}" alt="HKO Crypto" class="logo">
+        <div class="subscription">
+            <a href="/subscribe/" class="sub-btn" title="S'abonner">➕</a>
+            <a href="/notifications/" class="notif-btn" title="Notifications">🔔</a>
+        </div>
+    </div>
+    <!-- END: Dashboard Header -->
+
+    <!-- START: Detail Card -->
+    <div class="crypto-card detail-card" data-crypto="{{ crypto }}" id="detail-card">
+        <div class="card-top">
+            {% if crypto == 'bitcoin' %}
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Bitcoin.svg/1200px-Bitcoin.svg.png" alt="Bitcoin Logo" class="crypto-logo">
+            {% elif crypto == 'ethereum' %}
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Ethereum-icon-purple.svg/1200px-Ethereum-icon-purple.svg.png" alt="Ethereum Logo" class="crypto-logo">
+            {% elif crypto == 'solana' %}
+                <img src="https://cryptologos.cc/logos/solana-sol-logo.svg" alt="Solana Logo" class="crypto-logo">
+            {% else %}
+                <img src="https://cryptologos.cc/logos/{{ crypto }}-{{ crypto }}-logo.svg" alt="{{ crypto|capfirst }} Logo" class="crypto-logo">
+            {% endif %}
+            <h2 class="crypto-name">{{ crypto|capfirst }}</h2>
+            <div class="crypto-price" id="price-{{ crypto }}">Chargement…</div>
+        </div>
+        <div class="vibe-rotator">
+            <div class="vibe-item" data-vibe="reddit" style="display: block;">
+                <span class="vibe-label">Reddit:</span>
+                <span id="vibe-{{ crypto }}-reddit" class="sentiment-value">Chargement…</span>
+                <span id="score-{{ crypto }}-reddit" class="sentiment-score"></span>
+                <span class="arrow-icon" id="arrow-{{ crypto }}-reddit"></span>
+            </div>
+            <div class="vibe-item" data-vibe="news" style="display: none;">
+                <span class="vibe-label">News:</span>
+                <span id="vibe-{{ crypto }}-news" class="sentiment-value">Chargement…</span>
+                <span id="score-{{ crypto }}-news" class="sentiment-score"></span>
+                <span class="arrow-icon" id="arrow-{{ crypto }}-news"></span>
+            </div>
+            <button class="vibe-next-btn">&gt;</button>
+        </div>
+        <div class="prediction">
+            <span id="pred-{{ crypto }}-reddit" class="prediction-value">Chargement…</span>
+        </div>
+        <div class="prediction" style="display: none;">
+            <span id="pred-{{ crypto }}-news" class="prediction-value">Chargement…</span>
+        </div>
+        <div class="confidence">
+            <span id="pred-confidence-{{ crypto }}-reddit" class="confidence-value">Chargement…</span>
+        </div>
+        <div class="confidence" style="display: none;">
+            <span id="pred-confidence-{{ crypto }}-news" class="confidence-value">Chargement…</span>
+        </div>
+        <div class="detail-content">
+            <div class="chart-container detail-chart">
+                <canvas id="detail-price-chart" width="400" height="200"></canvas>
+            </div>
+            <div class="history-text" id="history-text-{{ crypto }}">Chargement du texte historique...</div>
+        </div>
+        <button class="return-btn" onclick="zoomOut()">⬅ Retour</button>
+    </div>
+    <!-- END: Detail Card -->
+
+    <!-- START: News Tickers -->
+    <div class="news-ticker-fixed">
+        <div class="ticker-content-fixed">
+            <span>Chargement des news...</span>
+        </div>
+    </div>
+    <div class="news-ticker">
+        <div class="ticker-content">
+            <span>Chargement des news...</span>
+        </div>
+    </div>
+    <!-- END: News Tickers -->
+
+    <script src="{% static 'crypto_vibe/crypto-vibe-script.js' %}"></script>
+</body>
+</html>

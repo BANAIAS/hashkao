@@ -1,0 +1,7642 @@
+.home-button {
+    background-color: #2b8af5;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.8em;
+    margin-right: 10px;
+    /* Écarte le bouton de la langue */
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+
+.home-button:hover {
+    background-color: #1a6fd3;
+}
+
+.home-button:active {
+    transform: scale(0.95);
+}
+
+/* Téléphone : bouton “Crypto-Vibe” plus compact */
+@media (max-width: 480px) {
+    .home-button {
+        font-size: 11px;
+        /* avant: 0.8em */
+        padding: 3px 8px;
+        /* plus fin, mais reste confortable au doigt */
+        border-radius: 6px;
+        /* un poil plus “pill” (optionnel) */
+        margin-left: 8px;
+    }
+}
+
+@media (max-width: 360px) {
+    .home-button {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+}
+
+
+
+#creativeScreen,
+#importerAlea,
+#secureWord,
+#resetButton {
+    display: none;
+}
+
+#previousCreative,
+#nextCreative {
+    opacity: 0;
+
+}
+
+.creative-options {
+    display: none;
+}
+
+
+
+
+html,
+body {
+    height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    /* Bloque le défilement horizontal */
+    overflow-y: auto;
+    /* Permet le défilement vertical */
+}
+
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f7f9fc;
+    color: #333;
+}
+
+/* Top-bar et ses enfants */
+.top-bar {
+    width: 100%;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 20px;
+    background-color: #f8f9fa;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+}
+
+.mode-switch-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 0 auto;
+    /* Décalé à droite */
+    margin-right: -60px;
+}
+
+.mode-label {
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    /* Ajustable: 12-16px */
+    font-weight: 400;
+    color: #666;
+    cursor: pointer;
+    transition: color 0.3s;
+}
+
+.mode-label.active {
+    font-weight: 700;
+    color: #333;
+}
+
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 40px;
+    /* Ajustable: 36-48px */
+    height: 20px;
+    /* Ajustable: 18-24px */
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    /* Ajustable: 14-20px */
+    width: 16px;
+    /* Ajustable: 14-20px */
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: #007bff;
+}
+
+input:checked+.slider:before {
+    transform: translateX(20px);
+    /* Ajuster si width change */
+}
+
+.language-selector {
+    display: flex;
+    align-items: center;
+    margin: 0 0 0 auto;
+    /* Décalé à droite */
+    margin-right: 80px;
+    /* Ajustable: 5-20px */
+}
+
+#languageSelect {
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    /* Ajustable: 12-16px */
+    padding: 5px 8px;
+    border: 1px solid #E0E0E0;
+    border-radius: 4px;
+    background-color: #fff;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.3s ease;
+    height: 30px;
+    /* Ajustable: 28-34px */
+    width: 60px;
+    /* Ajustable: 55-70px */
+    text-align: center;
+}
+
+#languageSelect:hover {
+    border-color: #999;
+}
+
+#languageSelect:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+/* Ajustements pour tablettes */
+@media screen and (max-width: 768px) {
+    .top-bar {
+        padding: 5px 10px;
+    }
+
+    .mode-switch-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 0 auto;
+        /* Décalé à droite */
+        margin-right: 10px;
+        /* Ajustable: 5-20px */
+    }
+
+    .mode-label {
+        font-size: 12px;
+        /* Ajustable: 12-14px */
+    }
+
+    .switch {
+        width: 36px;
+        /* Ajustable: 36-44px */
+        height: 18px;
+        /* Ajustable: 18-22px */
+    }
+
+    .slider:before {
+        height: 14px;
+        /* Ajustable: 12-18px */
+        width: 14px;
+        /* Ajustable: 12-18px */
+        left: 2px;
+        bottom: 2px;
+    }
+
+    input:checked+.slider:before {
+        transform: translateX(18px);
+        /* Ajuster si width change */
+    }
+
+    .language-selector {
+        display: flex;
+        align-items: center;
+        margin: 0 0 0 auto;
+        /* Décalé à droite */
+        margin-right: 50px;
+        /* Ajustable: 5-20px */
+    }
+
+    #languageSelect {
+        font-size: 12px;
+        /* Ajustable: 12-14px */
+        padding: 4px 6px;
+        height: 28px;
+        /* Ajustable: 26-32px */
+        width: 55px;
+        /* Ajustable: 50-65px */
+    }
+}
+
+/* Ajustements pour téléphones */
+@media screen and (max-width: 480px) {
+    .top-bar {
+        padding: 5px 10px;
+        justify-content: space-between;
+    }
+
+    .mode-switch-container {
+        margin: 0 auto;
+        margin-left: 90px;
+    }
+
+    .mode-label {
+        font-size: 13px;
+        /* Grossi, ajustable: 14-16px */
+    }
+
+    .switch {
+        width: 44px;
+        /* Grossi, ajustable: 40-48px */
+        height: 22px;
+        /* Grossi, ajustable: 20-24px */
+    }
+
+    .slider:before {
+        height: 18px;
+        /* Grossi, ajustable: 16-20px */
+        width: 18px;
+        /* Grossi, ajustable: 16-20px */
+        left: 2px;
+        bottom: 2px;
+    }
+
+    input:checked+.slider:before {
+        transform: translateX(22px);
+        /* Ajusté pour width: 44px */
+    }
+
+    .language-selector {
+        margin: 0 0 0 auto;
+        /* À droite */
+        margin-right: 25px;
+        /* Ajustable: 5-20px */
+    }
+
+    #languageSelect {
+        font-size: 14px;
+        /* Grossi, ajustable: 12-16px */
+        padding: 4px 6px;
+        height: 30px;
+        /* Grossi, ajustable: 28-34px */
+        width: 60px;
+        /* Grossi, ajustable: 55-70px */
+    }
+}
+
+/* Secours pour fenêtres courtes (ex. : console ouverte) */
+@media screen and (max-height: 600px) {
+    .top-bar {
+        padding: 5px 10px;
+    }
+
+    .mode-switch-container {
+        margin: 0;
+        margin-left: 10px;
+    }
+
+    .mode-label {
+        font-size: 14px;
+    }
+
+    .switch {
+        width: 44px;
+        height: 22px;
+    }
+
+    .slider:before {
+        height: 18px;
+        width: 18px;
+        left: 2px;
+        bottom: 2px;
+    }
+
+    input:checked+.slider:before {
+        transform: translateX(22px);
+    }
+
+    .language-selector {
+        margin: 0 0 0 auto;
+        margin-right: 10px;
+    }
+
+    #languageSelect {
+        font-size: 14px;
+        padding: 4px 6px;
+        height: 30px;
+        width: 60px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.app-container {
+    margin-top: 10px;
+    /* Compense la top-bar (50px) */
+    padding: 10px;
+    box-sizing: border-box;
+
+}
+
+/* Contenu principal à décaler */
+.app-container {
+    margin-left: 0;
+    transition: margin-left 0.4s ease-in-out;
+    padding-top: 50px;
+    min-height: 100vh;
+}
+
+.logo-header {
+    height: 35px;
+    width: auto;
+    position: absolute;
+    top: 40%;
+    left: 40px;
+    transform: translateY(-50%);
+    transition: height 0.3s ease, left 0.3s ease, filter 0.3s ease;
+
+
+}
+
+body.dark-theme .logo-header {
+    filter: invert(1) brightness(1.3);
+}
+
+/* Tablettes */
+@media screen and (max-width: 900px) {
+    .logo-header {
+        height: 30px;
+        left: 30px;
+    }
+}
+
+/* Smartphones */
+@media screen and (max-width: 600px) {
+    .logo-header {
+        height: 12px;
+        left: 2px;
+
+    }
+}
+
+/* Smartphones (ajusté pour Redmi Note 13) */
+@media screen and (max-width: 1080px) {
+    .logo-header {
+        height: 12px;
+        left: 2px;
+
+    }
+}
+
+/* Bouton README fixé en bas à droite */
+/* Bouton README fixé en bas à droite */
+.readme-btn-fixed {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 1001;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.readme-btn-fixed:hover {
+    background-color: #0056b3;
+}
+
+.resize-handle {
+    width: 16px;
+    height: 16px;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    cursor: se-resize;
+    background: transparent;
+}
+
+.modal-text {
+    cursor: grab;
+}
+
+.modal-text:active {
+    cursor: grabbing;
+}
+
+
+
+.modal-content {
+    position: fixed;
+    background-color: #fff;
+    border-radius: 8px;
+    width: 600px;
+    /* ✅ Taille fixe */
+    max-width: 90vw;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    top: 50%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1001;
+    cursor: default;
+    user-select: none;
+    /* ✅ Évite la sélection de texte parasite */
+}
+
+.dragging .modal-header {
+    cursor: grabbing !important;
+}
+
+.dragging .resize-handle {
+    cursor: nwse-resize !important;
+}
+
+.dragging,
+.dragging * {
+    user-select: none;
+}
+
+.modal-text {
+    cursor: grab;
+}
+
+.modal-text:active {
+    cursor: grabbing;
+}
+
+
+
+.modal-header {
+    background-color: #f0f0f0;
+    padding: 10px 20px;
+    cursor: move;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #ccc;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: normal;
+}
+
+.modal-text {
+    max-height: 300px;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.modal .close {
+    font-size: 20px;
+    cursor: pointer;
+    color: #666;
+}
+
+.modal .close:hover {
+    color: black;
+}
+
+.modal-text h2,
+.modal-text h3 {
+    font-family: 'Roboto', sans-serif;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.modal-text p {
+    font-size: 15px;
+    margin-bottom: 10px;
+}
+
+.modal-text ul {
+    padding-left: 20px;
+    margin-bottom: 15px;
+}
+
+.modal-text li {
+    margin-bottom: 5px;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+
+
+/* Header : hauteur fixe et typo centrée verticalement */
+/* Header : hauteur fixe et typo centrée verticalement */
+.header {
+    width: 100%;
+    background: #F5F6F5;
+    padding: 0;
+    height: 40px !important;
+    /* Forcer la hauteur desktop */
+    text-align: center;
+    border-bottom: 1px solid #E0E0E0;
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+}
+
+.header h1 {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+    font-size: 24px;
+    line-height: 1;
+    color: #333;
+    margin: 0;
+    letter-spacing: 1px;
+    text-align: center;
+    padding: 0;
+    position: relative;
+    top: 50%;
+    transform: translateY(-50%) !important;
+    /* Centrage vertical précis */
+}
+
+.header h1.align-left {
+    text-align: left;
+    padding-left: 20px;
+    padding-right: 0;
+}
+
+.header h1.align-right {
+    text-align: right;
+    padding-right: 20px;
+    padding-left: 0;
+}
+
+.header h1.align-center {
+    text-align: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Ajustements pour tablettes */
+@media screen and (max-width: 768px) {
+    .header {
+        height: 60px !important;
+    }
+
+    .header h1 {
+        font-size: 20px;
+        top: 50%;
+        transform: translateY(-50%) !important;
+    }
+
+    .header h1.align-left {
+        padding-left: 15px;
+    }
+
+    .header h1.align-right {
+        padding-right: 15px;
+    }
+}
+
+/* Ajustements pour téléphones */
+@media screen and (max-width: 480px) {
+    .header {
+        height: 50px !important;
+    }
+
+    .header h1 {
+        font-size: 18px;
+        top: 50%;
+        transform: translateY(-50%) !important;
+    }
+
+    .header h1.align-left {
+        padding-left: 10px;
+    }
+
+    .header h1.align-right {
+        padding-right: 10px;
+    }
+}
+
+/* Fenêtres courtes (ex. : console ouverte) */
+@media screen and (max-height: 700px) {
+    .header {
+        height: 36px !important;
+    }
+
+    .header h1 {
+        font-size: 18px;
+        top: 50%;
+        transform: translateY(-50%) !important;
+    }
+
+    .header h1.align-left {
+        padding-left: 10px;
+    }
+
+    .header h1.align-right {
+        padding-right: 10px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 
+ * Conteneur principal de l’écran de mot de passe
+ */
+.password-screen {
+    position: relative;
+    max-width: 600px;
+    margin: 25px auto;
+    background-color: #f8f9fa;
+    padding: 0;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    box-sizing: border-box;
+    height: 120px;
+    transition: height 0.3s ease;
+}
+
+.password-screen.two-lines {
+    height: 160px;
+    white-space: normal;
+    overflow-wrap: break-word;
+}
+
+.password-screen.three-lines {
+    height: 180px;
+}
+
+.password-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100%;
+    background-color: #FFFFFF;
+    border-radius: 12px;
+    z-index: 1;
+}
+
+.password-display {
+    font-family: 'Roboto', sans-serif;
+    font-size: 20px;
+    font-weight: 400;
+    color: #333333;
+    padding: 15px;
+    border: none;
+    border-radius: 12px;
+    position: relative;
+    background-color: transparent;
+    overflow: hidden !important;
+    width: 100%;
+    max-width: 546px !important;
+    box-sizing: border-box;
+    z-index: 2;
+    min-height: 60px;
+    max-height: 60px;
+    line-height: 45px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    padding-top: 30px;
+    direction: ltr !important;
+    overflow-wrap: break-word;
+    white-space: normal;
+    word-break: break-all;
+    text-align: center;
+    /* Renforcer le centrage */
+}
+
+.password-display:focus {
+    outline: none;
+    color: #000;
+    font-style: normal;
+}
+
+.password-display.import-view {
+    padding-top: 15px;
+    /* Ajuste ici à ton goût */
+}
+
+#creativeScreen.two-lines.editable {
+    padding-top: 22px;
+    /* Ajuste selon ton besoin visuel */
+}
+
+
+.password-display.two-lines {
+    min-height: 100px;
+    max-height: 100px;
+    padding-top: 15px;
+    text-align: center;
+    /* Renforcer le centrage pour deux lignes */
+}
+
+.password-display.three-lines {
+    min-height: 130px;
+    max-height: 130px;
+    padding-top: 20px;
+}
+
+/* Supprimer .line si non utilisé, ou ajuster pour compatibilité */
+.line {
+    display: block;
+    direction: ltr !important;
+    text-align: center;
+    width: 100%;
+    line-height: 1.2;
+    margin: 0;
+    padding: 0;
+}
+
+
+
+.random-screen {
+    pointer-events: none;
+}
+
+.generate-overlay {
+    position: absolute;
+    left: -15px;
+    /* Décalé à gauche de .copierm-screen */
+    top: 32%;
+    /* Centré verticalement */
+    transform: translate(-5px, -60%);
+    /* Ajustement précis */
+    background: none;
+    /* Pas de fond */
+    border: none;
+    /* Pas de bordure */
+    color: #555;
+    /* Gris moyen */
+    font-size: 20px;
+    /* Taille pour l’icône */
+    display: flex;
+    /* Centrage de l’icône */
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto;
+    /* Réactive les clics */
+    padding: 0;
+    /* Pas d’espacement interne */
+    width: 20px;
+    /* Taille fixe */
+    height: 20px;
+    transition: transform 0.2s ease;
+    /* Animation au survol */
+}
+
+.generate-overlay:hover {
+    transform: translate(-5px, -60%) scale(1.2);
+    color: #333333;
+    background: none;
+    border: none;
+    outline: none;
+}
+
+.generate-overlay:focus {
+    outline: none;
+    border: none;
+    background: none;
+}
+
+.generate-overlay:active {
+    animation: zoom-dezoom 0.3s ease;
+}
+
+
+#generateButton {
+    width: 120px;
+    text-align: center;
+}
+
+
+.anagram-overlay {
+    position: absolute;
+    left: 18px;
+    bottom: 15px;
+    transform: translateX(-5px) translateY(-5px);
+    background: #dfdfdf;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 3px 4px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    font-weight: 300;
+    color: #555555;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.anagram-overlay:hover {
+    background: #F0F0F0;
+    color: #333333;
+}
+
+/* Ajustements spécifiques */
+#anagram-button {
+    left: 20px;
+    bottom: 15px;
+    transform: translateX(0px) translateY(0px);
+    min-width: 100px;
+}
+
+#reverseButton {
+    left: 128px;
+    bottom: 15px;
+    transform: translateX(0px) translateY(0px);
+    min-width: 88px;
+}
+
+/* 
+ * Bouton "Copier" superposé
+ * Minimaliste en haut à droite avec effet de couleur
+ */
+.copy-overlay {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    transform: translateX(6px) translateY(-8px);
+    background: none !important;
+    border: none !important;
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #555555 !important;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: color 0.2s ease;
+    outline: none !important;
+}
+
+.copy-overlay:hover {
+    color: #333333 !important;
+    outline: none !important;
+    border: none !important;
+    background: none !important;
+}
+
+.copy-overlay:focus {
+    outline: none !important;
+    border: none !important;
+    background: none !important;
+}
+
+.copy-overlay.copied {
+    color: #2ECC71 !important;
+}
+
+.copy-overlay.copied::after {
+    content: '\2713';
+    margin-left: 5px;
+    font-size: 13px;
+    color: #2ECC71 !important;
+}
+
+/* 
+ * Bouton "M" (mémoire) superposé
+ * En haut à droite avec fond blanc et bordure
+ */
+.memory-overlay {
+    position: absolute;
+    top: 10px;
+    right: 60px;
+    transform: translateX(-15px) translateY(-2px);
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 3px 8px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    font-weight: 300;
+    color: #555555;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.memory-overlay:hover {
+    background: #F0F0F0;
+    color: #333333;
+}
+
+.nav-overlay {
+    position: absolute;
+    background-color: transparent;
+    border: none;
+    padding: 5px 10px;
+    /* Garde l’espace cliquable */
+    cursor: pointer;
+    font-size: 16px;
+    border-radius: 4px;
+    pointer-events: auto;
+    filter: grayscale(100%) contrast(50%) brightness(180%);
+    /* Gris clair */
+    transition: filter 0.3s ease;
+}
+
+/* Effet au survol */
+.nav-overlay:hover {
+    filter: grayscale(100%) contrast(50%) brightness(40%);
+    /* Gris foncé */
+    background-color: transparent;
+    /* Force l’absence de cadre */
+}
+
+/* Positionnement spécifique */
+#previousCreative {
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-35px);
+}
+
+#nextCreative {
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(15px);
+}
+
+.copy-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #4caf50;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 5px;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    z-index: 999;
+    font-size: 14px;
+    /* Taille explicite pour cohérence */
+}
+
+.strength-meter {
+    position: absolute;
+    bottom: 5px;
+    left: 15px;
+    right: 15px;
+    width: auto;
+    height: 4px;
+    background-color: #E0E0E0;
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.strength-bar {
+    height: 10px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    background-color: transparent;
+    /* État par défaut */
+}
+
+#random-strength-bar {
+    width: 0%;
+    /* État initial */
+}
+
+/* 
+ * Barre de progression de la force
+ * Anime la largeur pour indiquer la force
+ */
+.strength-meter .strength-bar {
+    height: 100%;
+    width: 0%;
+    background-color: #4A90E2;
+    transition: width 0.3s ease-in-out;
+}
+
+/* 
+ * Texte des indicateurs de force
+ * Positionné au-dessus de la barre
+ */
+#strength-text,
+#random-strength-text {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    color: #555555;
+    font-size: 0.75rem;
+    position: absolute;
+    right: 15px;
+    bottom: 15px;
+}
+
+
+
+
+#main-screen,
+#randomScreen,
+#creativeScreen {
+    width: 100%;
+    max-width: 400px;
+    overflow: visible !important;
+    white-space: normal !important;
+    /* Remplace nowrap */
+    box-sizing: border-box;
+    text-align: center !important;
+    margin: 0 auto;
+}
+
+#randomScreen {
+    overflow: visible !important;
+    width: 100%;
+    max-width: 546px;
+}
+
+.line {
+    display: block;
+    /* Chaque ligne est un bloc */
+    text-align: center;
+    line-height: 1.4;
+}
+
+.password-container {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+    text-align: center !important;
+    overflow: hidden !important;
+}
+
+
+
+.overlay-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100%;
+    background: transparent;
+    pointer-events: none;
+    z-index: 10;
+    border-radius: 12px;
+}
+
+#creativeScreen {
+    position: relative;
+    /* Pour positionner le ::before */
+}
+
+#creativeScreen:empty::before {
+    content: attr(data-i18n-placeholder);
+    color: #999;
+    /* Gris pour effet placeholder */
+    font-size: 20px;
+    font-weight: 400;
+    position: absolute;
+    top: 25px;
+    left: 15px;
+    pointer-events: none;
+    /* Non sélectionnable */
+    z-index: 2;
+}
+
+#creativeScreen {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: flex-start;
+    text-align: center;
+    direction: ltr;
+    unicode-bidi: plaintext;
+}
+
+#creativeScreen .line {
+    display: block;
+    width: 100%;
+    direction: ltr;
+    unicode-bidi: plaintext;
+    text-align: center;
+    white-space: normal;
+}
+
+#creativeScreen .first-line,
+#creativeScreen .second-line {
+    padding: 0;
+    margin: 0;
+}
+
+
+
+
+#randomScreen:empty::before {
+    content: none !important;
+}
+
+
+
+.alert-window,
+.success-window {
+    position: fixed;
+    top: 120px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #ff4d4d;
+    /* Rouge pour .alert-window */
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    font-size: 16px;
+    text-align: center;
+    max-width: 80%;
+}
+
+.success-window {
+    background-color: #28a745;
+    /* Vert pour .success-window */
+}
+
+.alert-window.show,
+.success-window.show {
+    opacity: 1;
+}
+
+#random-strength-meter,
+#creative-strength-meter {
+    display: none;
+    /* Masqué par défaut */
+}
+
+
+@media (max-width: 768px) {
+    .password-screen {
+        max-width: 90%;
+        margin: 15px auto;
+        height: 110px;
+    }
+
+    .password-screen.two-lines {
+        height: 120px;
+        /* Ajusté pour tablette */
+    }
+
+    .password-screen.three-lines {
+        height: 170px;
+    }
+
+    .password-background {
+        border-radius: 12px;
+        height: 100%;
+    }
+
+    .password-display {
+        font-size: 18px;
+        padding: 12px;
+        padding-top: 20px;
+        min-height: 60px;
+        max-height: 60px;
+    }
+
+    .password-display.two-lines {
+        padding-top: 15px;
+        min-height: 90px;
+        max-height: 90px;
+    }
+
+    .password-display.three-lines {
+        padding-top: 20px;
+        min-height: 130px;
+        max-height: 130px;
+    }
+
+    .overlay-screen {
+        height: 100%;
+    }
+
+    .creative-screen:empty::before {
+        font-size: 18px;
+        top: 20px;
+        left: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .password-screen {
+        max-width: 90%;
+        margin: 10px auto;
+        height: 120px;
+    }
+
+    .password-screen.two-lines {
+        height: 160px;
+        /* Ajusté pour téléphone */
+    }
+
+    .password-screen.three-lines {
+        height: 200px;
+    }
+
+    .password-background {
+        border-radius: 8px;
+        height: 100%;
+    }
+
+    .password-display {
+        font-size: 18px;
+        padding: 15px;
+        padding-top: 25px;
+        min-height: 60px;
+        max-height: 60px;
+    }
+
+    .password-display.two-lines {
+        padding-top: 10px;
+        min-height: 90px;
+        max-height: 90px;
+    }
+
+    .password-display.three-lines {
+        padding-top: 25px;
+        min-height: 130px;
+        max-height: 130px;
+    }
+
+    .overlay-screen {
+        height: 100%;
+    }
+
+    .creative-screen:empty::before {
+        font-size: 18px;
+        top: 20px;
+        left: 15px;
+    }
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .generate-overlay {
+        left: -10px;
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+    }
+
+    #generateButton {
+        width: 100px;
+    }
+
+    .anagram-overlay {
+        left: 15px;
+        bottom: 10px;
+        font-size: 11px;
+        padding: 2px 3px;
+    }
+
+    #anagram-button {
+        left: 15px;
+        bottom: 10px;
+        min-width: 90px;
+    }
+
+    #reverseButton {
+        left: 115px;
+        bottom: 10px;
+        min-width: 80px;
+    }
+
+    .copy-overlay {
+        top: 8px;
+        right: 8px;
+        font-size: 12px;
+    }
+
+    .memory-overlay {
+        top: 8px;
+        right: 50px;
+        font-size: 12px;
+        padding: 2px 6px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .generate-overlay {
+        left: -8px;
+        font-size: 18px;
+        width: 16px;
+        height: 56px;
+    }
+
+    #generateButton {
+        width: 80px;
+    }
+
+    .anagram-overlay {
+        left: 10px;
+        bottom: 8px;
+        font-size: 10px;
+        padding: 2px 3px;
+    }
+
+    #anagram-button {
+        left: 10px;
+        bottom: 12px;
+        min-width: 70px;
+    }
+
+    #reverseButton {
+        left: 85px;
+        bottom: 12px;
+        min-width: 60px;
+    }
+
+    .copy-overlay {
+        top: 6px;
+        right: 6px;
+        font-size: 11px;
+    }
+
+    .memory-overlay {
+        top: 7px;
+        right: 50px;
+        font-size: 11px;
+        padding: 2px 5px;
+    }
+}
+
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .nav-overlay {
+        padding: 4px 8px;
+        /* Réduit l’espace cliquable */
+        font-size: 14px;
+        /* Icône plus petite */
+    }
+
+    #previousCreative {
+        bottom: 8px;
+        transform: translateX(-30px);
+        /* Rapproché */
+    }
+
+    #nextCreative {
+        bottom: 8px;
+        transform: translateX(10px);
+        /* Rapproché */
+    }
+
+
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .nav-overlay {
+        padding: 3px 6px;
+        font-size: 16px;
+    }
+
+    #previousCreative {
+        bottom: 10px;
+        transform: translateX(-25px);
+        /* Encore plus rapproché */
+    }
+
+    #nextCreative {
+        bottom: 10px;
+        transform: translateX(5px);
+        /* Encore plus rapproché */
+    }
+
+
+}
+
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .copy-notification {
+        top: 15px;
+        right: 15px;
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .copy-notification {
+        top: 10px;
+        right: 10px;
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+}
+
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .strength-meter {
+        bottom: 4px;
+        left: 12px;
+        right: 12px;
+        height: 3px;
+        /* Légèrement plus fine */
+    }
+
+    #strength-text,
+    #random-strength-text {
+        font-size: 0.9rem;
+        /* ≈11.2px */
+        right: 12px;
+        bottom: 12px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .strength-meter {
+        bottom: 3px;
+        left: 10px;
+        right: 10px;
+        height: 3px;
+    }
+
+    #strength-text,
+    #random-strength-text {
+        font-size: 0.85rem;
+        /* ≈10.4px */
+        right: 10px;
+        bottom: 10px;
+    }
+}
+
+@media (max-width: 546px) {
+    .password-display {
+        max-width: 100% !important;
+        padding: 10px;
+        font-size: clamp(16px, 5vw, 36px);
+    }
+}
+
+
+
+/* Mobile (jusqu’à 767px) */
+@media screen and (max-width: 767px) {
+
+    .alert-window,
+    .success-window {
+        top: 40px;
+        padding: 8px 15px;
+        font-size: 14px;
+        max-width: 90%;
+    }
+}
+
+/* Tablette (768px à 1023px) */
+@media screen and (min-width: 768px) and (max-width: 1023px) {
+
+    .alert-window,
+    .success-window {
+        top: 40px;
+        padding: 9px 18px;
+        font-size: 15px;
+        max-width: 85%;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 
+ * Styles pour l’en-tête
+ */
+
+
+/* Bouton du menu (≡ et fermeture) */
+.menu-button {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: black;
+    z-index: 1001;
+    padding: 8px;
+    width: 40px;
+    height: 40px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.5s ease;
+}
+
+.menu-button:hover {
+    background-color: rgba(240, 240, 240, 1);
+}
+
+.side-menu.open .menu-button {
+    width: 240px;
+    justify-content: flex-start;
+    padding-left: 15px;
+    background-color: rgba(230, 230, 230, 1);
+    border-radius: 5px 0 0 5px;
+}
+
+.side-menu.open .menu-button::after {
+    content: " Options";
+    font-weight: bold;
+    font-size: 18px;
+    padding-left: 27px;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.side-menu.open .menu-button:hover {
+    background-color: rgba(220, 220, 220, 1);
+}
+
+/* Menu latéral */
+.side-menu {
+    position: fixed;
+    top: 0;
+    left: -250px;
+    width: 250px;
+    height: 100vh;
+    background-color: #f8f9fa;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.2);
+    transition: left 0.4s ease-in-out;
+    padding: 10px;
+    z-index: 1000;
+    overflow-y: auto;
+}
+
+.side-menu.open {
+    left: 0;
+}
+
+/* Décalage de .app-container quand .side-menu s’ouvre */
+.side-menu.open~.app-container {
+    margin-left: 250px;
+    /* Grand écran */
+}
+
+/* En-tête et contenu du menu */
+.menu-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px;
+    border-bottom: 1px solid #ddd;
+    margin-bottom: 6px;
+}
+
+.menu-content {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 70px);
+    padding-bottom: 5px;
+    margin-top: 50px;
+}
+
+/* Boutons autonomes */
+.standalone-button {
+    padding: 6px 10px;
+    font-size: 15px;
+    line-height: 1.3;
+    border-radius: 3px;
+    cursor: pointer;
+    background-color: #c7c7c7;
+    color: #333;
+    text-align: left;
+    width: calc(100% - 20px);
+    margin: 0 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.3s ease-in-out;
+}
+
+.standalone-button:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+#reinitialiser:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+#reinitialiser:active {
+    background-color: #b52b3a;
+}
+
+/* Éléments du menu */
+.menu-item {
+    padding: 6px 10px;
+    font-size: 15px;
+    line-height: 1.3;
+    border-radius: 3px;
+    transition: background 0.3s ease-in-out;
+}
+
+.menu-item span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Titre du menu (inchangé) */
+.menu-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    cursor: pointer;
+    background-color: #f0f0f0;
+    border-radius: 4px;
+}
+
+.menu-title:hover,
+.arrow:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.arrow {
+    margin-left: 10px;
+    font-size: 14px;
+    transition: transform 0.4s ease;
+}
+
+.menu-item.open .arrow {
+    transform: rotate(90deg);
+}
+
+.submenu {
+    display: none;
+    padding: 10px 0 10px 15px;
+    border-left: 2px solid #ddd;
+}
+
+.submenu.open {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Style spécifique pour les boutons dans le sous-menu */
+.submenu .menu-item {
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    color: #333;
+    text-align: center;
+    cursor: pointer;
+    transition: background 0.3s ease-in-out;
+    line-height: 1;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Lien "Conseils de sécurité" */
+#passwordTips a {
+    /* Padding défini ici uniquement */
+    background: transparent;
+    /* Transparent par défaut, comme les autres */
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    color: #333;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.3s ease-in-out;
+    line-height: 1;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Effet au survol pour tous les boutons */
+.submenu .menu-item:hover,
+#passwordTips a:hover {
+    background: #d8d8d8;
+    /* Gris plus foncé au survol */
+}
+
+/* Modales fixées pour ne pas être décalées */
+#exportPage,
+#specialCharsWindowRandom,
+#specialCharsWindow,
+#separatorModal {
+    position: fixed;
+    left: 0;
+    transform: none;
+    z-index: 1001;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .side-menu {
+        width: 200px;
+        left: -200px;
+    }
+
+    .side-menu.open~.app-container {
+        margin-left: 200px;
+    }
+
+    .side-menu.open .menu-button {
+        width: 190px;
+    }
+
+    .submenu .menu-item,
+    #passwordTips a {
+        padding: 4px 8px;
+        font-size: 13px;
+        min-height: 24px;
+    }
+
+    .submenu.open {
+        gap: 3px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .side-menu {
+        width: 30%;
+        left: -30%;
+    }
+
+    .side-menu.open~.app-container .header h1 {
+        font-size: 20px;
+    }
+
+    .side-menu.open~.app-container {
+        margin-left: 30%;
+    }
+
+    .side-menu.open .menu-button {
+        width: 30%;
+        font-size: 20px;
+        padding-left: 10px;
+        background-color: rgba(230, 230, 230, 1);
+    }
+
+    .side-menu.open .menu-button::after {
+        font-size: 14px;
+        padding-left: 35px;
+    }
+
+    .menu-header {
+        padding: 8px 5px;
+    }
+
+    .menu-content {
+        margin-top: 40px;
+        height: calc(100vh - 50px);
+    }
+
+    .standalone-button {
+        padding: 4px 6px;
+        font-size: 13px;
+        margin: 0 5px;
+        width: calc(100% - 10px);
+    }
+
+    .menu-item {
+        padding: 4px 6px;
+        font-size: 13px;
+    }
+
+    .menu-title {
+        padding: 8px 10px;
+        font-size: 14px;
+    }
+
+    .arrow {
+        font-size: 12px;
+        margin-left: 5px;
+    }
+
+    .submenu {
+        padding: 8px 0 8px 10px;
+    }
+
+    .submenu .menu-item,
+    #passwordTips a {
+        padding: 4px 8px;
+        font-size: 12px;
+        min-height: 22px;
+    }
+
+    .submenu.open {
+        gap: 3px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Conteneur pour l’interrupteur de mode (Aléatoire/Créatif) */
+
+
+
+
+/* Conteneur du toggle switch */
+
+
+
+/* 
+ * Classe utilitaire pour masquer des éléments
+ * Appliquée à divers éléments (ex. boutons, modales) pour les cacher
+ */
+.hidden {
+    display: none;
+}
+
+
+.visible {
+    display: inline-block;
+}
+
+
+/* 
+ * Style par défaut des étiquettes de mode (Aléatoire/Créatif)
+ * Définit une apparence neutre avec transition sur la couleur
+ */
+
+
+/* 
+ * Style actif pour l’étiquette de mode sélectionnée
+ * Met en évidence avec un poids plus marqué et une couleur sombre
+ */
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 
+ * Notification de copie
+ * Affichée temporairement en haut à droite
+ */
+
+
+/* 
+ * Conteneur de la barre de force
+ * Positionné en bas des écrans
+ */
+
+
+
+
+
+/* 
+ * Conteneur parent pour les contrôles sous les écrans
+ * Aligne les boutons à gauche et à droite
+ */
+.below-screen-wrapper {
+    display: flex;
+    justify-content: space-between;
+    max-width: 600px;
+    width: 100%;
+    margin: -12px auto 0;
+}
+
+/* 
+ * Conteneur des boutons à gauche
+ * Aligne Réinitialiser, Importer Aléa, Sécuriser
+ */
+.below-screen-controls-left {
+    display: flex;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+/* 
+ * Conteneur des boutons à droite
+ * Aligne Tous Copier et Exporter
+ */
+.below-screen-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* 
+ * Style commun à tous les boutons sous les écrans
+ * Apparence de base avec bordure et transition
+ */
+.below-screen-button {
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 4px 10px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #555;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Bouton Réinitialiser */
+.below-screen-button.reset-style {
+    background: #007BFF;
+    color: white;
+}
+
+#resetButton:hover {
+    background-color: #c82333;
+}
+
+/* Bouton Importer Aléa */
+.below-screen-button.importer-style {
+    background: #007BFF;
+    color: white;
+}
+
+.below-screen-button.importer-style:hover {
+    background: #39aebe;
+}
+
+/* Bouton Sécuriser */
+.below-screen-button.secure-style {
+    background: #007BFF;
+    color: #fff;
+}
+
+.below-screen-button.secure-style:hover {
+    background: #4ce26d;
+}
+
+/* Bouton Tous Copier */
+.below-screen-button#allCopyButton {
+    background: #004085;
+    color: white;
+    display: none;
+    width: 100px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 14px;
+    transition: background 0.3s ease-in-out;
+}
+
+.below-screen-button#allCopyButton:hover {
+    background: #002752;
+}
+
+/* Bouton Exporter */
+.below-screen-button.export-style {
+    background: #28A745;
+    color: white;
+}
+
+.below-screen-button.export-style:hover {
+    background: #196b2c;
+}
+
+/* 
+ * Conteneur parent pour les contrôles sous les écrans
+ * Aligne les boutons à gauche et à droite
+ */
+.below-screen-wrapper {
+    display: flex;
+    justify-content: space-between;
+    max-width: 600px;
+    width: 100%;
+    margin: -12px auto 0;
+}
+
+/* 
+ * Conteneur des boutons à gauche
+ * Aligne Réinitialiser, Importer Aléa, Sécuriser
+ */
+.below-screen-controls-left {
+    display: flex;
+    justify-content: flex-start;
+    gap: 10px;
+}
+
+/* 
+ * Conteneur des boutons à droite
+ * Aligne Tous Copier et Exporter
+ */
+.below-screen-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* 
+ * Style commun à tous les boutons sous les écrans
+ * Apparence de base avec bordure et transition
+ */
+.below-screen-button {
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 4px 10px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #555;
+    cursor: pointer;
+    transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+/* Bouton Réinitialiser */
+.below-screen-button.reset-style {
+    background: #007BFF;
+    color: white;
+}
+
+#resetButton:hover {
+    background-color: #c82333;
+}
+
+/* Bouton Importer Aléa */
+.below-screen-button.importer-style {
+    background: #007BFF;
+    color: white;
+}
+
+.below-screen-button.importer-style:hover {
+    background: #39aebe;
+}
+
+/* Bouton Sécuriser */
+.below-screen-button.secure-style {
+    background: #007BFF;
+    color: #fff;
+}
+
+.below-screen-button.secure-style:hover {
+    background: #4ce26d;
+}
+
+/* Bouton Tous Copier */
+.below-screen-button#allCopyButton {
+    background: #004085;
+    color: white;
+    display: none;
+    width: 100px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 14px;
+    transition: background 0.3s ease-in-out, transform 0.2s ease;
+}
+
+.below-screen-button#allCopyButton:hover {
+    background: #002752;
+}
+
+/* Bouton Exporter */
+.below-screen-button.export-style {
+    background: #28A745;
+    color: white;
+}
+
+.below-screen-button.export-style:hover {
+    background: #196b2c;
+}
+
+
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .below-screen-wrapper {
+        max-width: 90%;
+        margin: -10px auto 0;
+    }
+
+    .below-screen-controls-left,
+    .below-screen-controls {
+        gap: 8px;
+    }
+
+    .below-screen-button {
+        padding: 3px 8px;
+        font-size: 13px;
+    }
+
+    .below-screen-button#allCopyButton {
+        width: 90px;
+        padding: 4px 8px;
+    }
+
+
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .below-screen-wrapper {
+        max-width: 90%;
+        margin: -8px auto 0;
+        flex-direction: row;
+        justify-content: space-between;
+        gap: 6px;
+    }
+
+    .below-screen-controls-left {
+        display: flex;
+        justify-content: flex-start;
+        gap: 6px;
+    }
+
+    .below-screen-controls {
+        display: flex;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    .below-screen-button {
+        padding: 5px 10px;
+        /* Réduit légèrement de 6px 12px */
+        font-size: 13px;
+        /* Réduit de 14px */
+    }
+
+    .below-screen-button#allCopyButton {
+        width: 90px;
+        padding: 5px 10px;
+    }
+
+    /* Mode créatif : 2 lignes sur téléphone */
+    .below-screen-wrapper.mode-creative {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .below-screen-wrapper.mode-creative .below-screen-controls-left {
+        width: 100%;
+        justify-content: space-between;
+        gap: 6px;
+    }
+
+    .below-screen-wrapper.mode-creative .below-screen-controls {
+        width: 100%;
+        justify-content: flex-end;
+        gap: 6px;
+    }
+
+    /* Ajustements quand .side-menu est ouverte */
+    .side-menu.open~.app-container .below-screen-wrapper {
+        max-width: 85%;
+    }
+
+    .side-menu.open~.app-container .below-screen-controls-left,
+    .side-menu.open~.app-container .below-screen-controls {
+        gap: 4px;
+    }
+
+    .side-menu.open~.app-container .below-screen-button {
+        transform: scale(0.9);
+        /* Mode aléatoire */
+    }
+
+    .side-menu.open~.app-container .below-screen-wrapper.mode-creative .below-screen-button {
+        transform: scale(0.9);
+        /* Mode créatif */
+    }
+}
+
+
+
+
+/* 
+ * Conteneur des options sous les écrans
+ * Organise verticalement le curseur et le compteur
+ */
+.password-options {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+    margin-top: 18px;
+}
+
+/* 
+ * Conteneur du curseur pour le mode aléatoire
+ * Centre le label et le curseur
+ */
+.length-slider-container {
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+    margin-top: -5px;
+}
+
+/* Label du curseur */
+.length-slider-container label {
+    display: block;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+/* Curseur de longueur (base) */
+.length-slider-container input[type="range"] {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #E0E0E0;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    position: relative;
+    --range-progress: 33.33%;
+}
+
+/* Piste du curseur (Chrome) */
+.length-slider-container input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(to right, #888 0%, #888 var(--range-progress), #E0E0E0 var(--range-progress), #E0E0E0 100%);
+    border-radius: 3px;
+}
+
+/* Thumb (bouton) */
+.length-slider-container input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #888888;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    transform: translateY(-5px);
+}
+
+.length-slider-container input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #888888;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    transform: translateY(-5px);
+}
+
+.length-slider-container input[type="range"]::-webkit-slider-thumb:hover,
+.length-slider-container input[type="range"]::-moz-range-thumb:hover {
+    background: #666666;
+}
+
+/* Piste remplie à gauche (Firefox) */
+.length-slider-container input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    background: #E0E0E0;
+    border-radius: 3px;
+}
+
+.length-slider-container input[type="range"]::-moz-range-progress {
+    background: #888888;
+    height: 6px;
+    border-radius: 3px;
+}
+
+/* Valeur affichée du curseur */
+#length-value {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    color: #333;
+    margin-left: 5px;
+}
+
+/* Conteneur du compteur pour le mode créatif */
+.creative-length-display {
+    text-align: center;
+    margin-top: -6px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #555;
+}
+
+/* Valeur affichée du compteur */
+#creative-length-value {
+    font-weight: 400;
+    color: #333;
+    margin-left: 5px;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .password-options {
+        gap: 14px;
+        /* Plus grand que 12px, proche de la base */
+        margin-top: 16px;
+        /* Plus d’espace qu’avant */
+    }
+
+    .length-slider-container {
+        max-width: 380px;
+        /* Plus large que 350px */
+        margin-top: -4px;
+    }
+
+    .length-slider-container label {
+        font-size: 14px;
+        /* Plus gros que 13px */
+        margin-bottom: 7px;
+    }
+
+    .length-slider-container input[type="range"] {
+        height: 6px;
+        /* Plus épais que 5px, comme téléphone */
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-runnable-track {
+        height: 6px;
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-thumb {
+        width: 16px;
+        /* Plus gros que 14px */
+        height: 16px;
+        transform: translateY(-5px);
+        /* Ajusté pour hauteur 6px */
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        transform: translateY(-5px);
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-track {
+        height: 6px;
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-progress {
+        height: 6px;
+    }
+
+    #length-value {
+        font-size: 14px;
+        /* Plus gros que 13px */
+    }
+
+    .creative-length-display {
+        font-size: 14px;
+        /* Plus gros que 13px */
+        margin-top: -5px;
+    }
+
+    #creative-length-value {
+        font-size: 14px;
+        /* Plus gros que 13px */
+    }
+}
+
+
+
+
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .password-options {
+        gap: 12px;
+        /* Légèrement plus grand pour respirer */
+        margin-top: 14px;
+        /* Plus d’espace au-dessus */
+    }
+
+    .length-slider-container {
+        max-width: 340px;
+        /* Plus large que 300px */
+        margin-top: -3px;
+    }
+
+    .length-slider-container label {
+        font-size: 14px;
+        /* Plus gros que 12px */
+        margin-bottom: 6px;
+    }
+
+    .length-slider-container input[type="range"] {
+        height: 6px;
+        /* Plus épais que 4px */
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-runnable-track {
+        height: 6px;
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-thumb {
+        width: 18px;
+        /* Plus gros que 12px */
+        height: 18px;
+        transform: translateY(-6px);
+        /* Ajusté pour hauteur 6px */
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        transform: translateY(-6px);
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-track {
+        height: 6px;
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-progress {
+        height: 6px;
+    }
+
+    #length-value {
+        font-size: 14px;
+        /* Plus gros que 12px */
+    }
+
+    .creative-length-display {
+        font-size: 14px;
+        /* Plus gros que 12px */
+        margin-top: -4px;
+    }
+
+    #creative-length-value {
+        font-size: 14px;
+        /* Plus gros que 12px */
+    }
+
+    /* Ajustements quand .side-menu est ouverte */
+    .side-menu.open~.app-container .length-slider-container {
+        max-width: 300px;
+        /* Réduit pour téléphone (~336px disponibles) */
+    }
+
+    .side-menu.open~.app-container .length-slider-container label {
+        font-size: 13px;
+    }
+
+    .side-menu.open~.app-container .length-slider-container input[type="range"] {
+        height: 5px;
+    }
+
+    .side-menu.open~.app-container .length-slider-container input[type="range"]::-webkit-slider-runnable-track {
+        height: 5px;
+    }
+
+    .side-menu.open~.app-container .length-slider-container input[type="range"]::-webkit-slider-thumb {
+        width: 16px;
+        /* Réduit légèrement */
+        height: 16px;
+        transform: translateY(-5px);
+    }
+
+    .side-menu.open~.app-container .length-slider-container input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        transform: translateY(-5px);
+    }
+
+    .side-menu.open~.app-container .length-slider-container input[type="range"]::-moz-range-track {
+        height: 5px;
+    }
+
+    .side-menu.open~.app-container .length-slider-container input[type="range"]::-moz-range-progress {
+        height: 5px;
+    }
+
+    .side-menu.open~.app-container #length-value {
+        font-size: 13px;
+    }
+
+    .side-menu.open~.app-container .creative-length-display {
+        font-size: 13px;
+        margin-top: -3px;
+    }
+
+    .side-menu.open~.app-container #creative-length-value {
+        font-size: 13px;
+    }
+}
+
+
+
+
+/* 
+ * Conteneur des options principales
+ * Centre les groupes de cases à cocher
+ */
+.top-options {
+    max-width: 600px;
+    width: 100%;
+    margin: 15px auto 0;
+}
+
+/* 
+ * Groupe de cases à cocher (random/creative)
+ * Aligne les options avec flexibilité
+ */
+.checkbox-group {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/* Label des cases à cocher */
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #555;
+    cursor: pointer;
+    line-height: 16px;
+}
+
+/* Case à cocher personnalisée */
+.checkbox-group input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border: 1px solid #E0E0E0;
+    border-radius: 4px;
+    margin-right: 8px;
+    background-color: #FFFFFF;
+    position: relative;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+/* État coché */
+.checkbox-group input[type="checkbox"]:checked {
+    border-color: #888;
+}
+
+/* Coche dans l’état coché */
+.checkbox-group input[type="checkbox"]:checked::after {
+    content: '\2713';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #888;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* Survol de la case */
+.checkbox-group input[type="checkbox"]:hover {
+    border-color: #666;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .top-options {
+        max-width: 90%;
+        margin: 12px auto 0;
+        /* Légèrement réduit */
+    }
+
+    .checkbox-group {
+        flex-wrap: nowrap;
+        /* Force une seule ligne */
+        gap: 12px;
+        /* Réduit pour tenir */
+    }
+
+    .checkbox-group label {
+        font-size: 16px;
+        /* Plus gros pour lisibilité */
+        line-height: 18px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        /* Plus gros */
+        height: 18px;
+        margin-right: 6px;
+        /* Réduit pour compacter */
+    }
+
+    .checkbox-group input[type="checkbox"]:checked::after {
+        font-size: 14px;
+        /* Coche plus grande */
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .top-options {
+        max-width: 90%;
+        margin: 10px auto 0;
+    }
+
+    .checkbox-group {
+        flex-wrap: nowrap;
+        /* Une seule ligne */
+        gap: 10px;
+        /* Encore plus compact */
+    }
+
+    .checkbox-group label {
+        font-size: 15px;
+        /* Gros mais adapté */
+        line-height: 17px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        /* Gros pour saisie */
+        height: 18px;
+        margin-right: 5px;
+        /* Compact */
+    }
+
+    .checkbox-group input[type="checkbox"]:checked::after {
+        font-size: 13px;
+        /* Coche lisible */
+    }
+}
+
+
+
+
+
+
+/* 
+ * Conteneur global des options
+ * Centre les éléments avec une largeur maximale
+ */
+.options-container {
+    max-width: 800px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0;
+}
+
+/* 
+ * Options spécifiques au mode aléatoire
+ * Conteneur des curseurs et caractères spéciaux
+ */
+.random-options {
+    width: 580px;
+    margin: 20px auto;
+    padding: 10px 20px;
+    background: #FFFFFF;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* 
+ * Groupe de curseurs (label, input, span)
+ * Aligne chaque ligne horizontalement
+ */
+.slider-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 10px 0;
+    width: 100%;
+}
+
+.slider-group label {
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #333;
+    width: 140px;
+    flex-shrink: 0;
+}
+
+.slider-group input[type="range"] {
+    width: 340px;
+    height: 6px;
+    border-radius: 3px;
+    background: #E0E0E0;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    transition: background 0.2s ease;
+    --range-progress: 50%;
+}
+
+.slider-group input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    background: linear-gradient(to right, #007bff 0%, #007bff var(--range-progress), #E0E0E0 var(--range-progress), #E0E0E0 100%);
+    border-radius: 3px;
+}
+
+.slider-group input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #007bff;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-top: -5px;
+}
+
+.slider-group input[type="range"]:hover::-webkit-slider-thumb {
+    background: #0056b3;
+}
+
+.slider-group input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #007bff;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    margin-top: -5px;
+}
+
+.slider-group input[type="range"]:hover::-moz-range-thumb {
+    background: #0056b3;
+}
+
+.slider-group input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    background: #E0E0E0;
+    border-radius: 3px;
+}
+
+.slider-group input[type="range"]::-moz-range-progress {
+    background: #007bff;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.slider-group span {
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #555555;
+    min-width: 40px;
+    text-align: right;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .password-options {
+        gap: 12px;
+        margin-top: 15px;
+    }
+
+    .length-slider-container {
+        max-width: 350px;
+        margin-top: -4px;
+    }
+
+    .length-slider-container label {
+        font-size: 13px;
+        margin-bottom: 6px;
+    }
+
+    .length-slider-container input[type="range"] {
+        height: 5px;
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-runnable-track {
+        height: 5px;
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-thumb {
+        width: 14px;
+        height: 14px;
+        transform: translateY(-4.5px);
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        transform: translateY(-4.5px);
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-track {
+        height: 5px;
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-progress {
+        height: 5px;
+    }
+
+    #length-value {
+        font-size: 13px;
+    }
+
+    .creative-length-display {
+        font-size: 13px;
+        margin-top: -5px;
+    }
+
+    #creative-length-value {
+        font-size: 13px;
+    }
+
+    .options-container {
+        max-width: 90%;
+        padding: 0;
+    }
+
+    .options-container.random-options {
+        /* Corrigé pour cibler le même élément */
+        width: 100%;
+        max-width: 630px;
+        /* Élargi de 500px à 630px */
+        margin: 20px auto;
+        padding: 10px;
+        min-height: unset;
+    }
+
+    .random-options .slider-group {
+        gap: 18px;
+        margin: 22px 0;
+    }
+
+    .slider-group label {
+        font-size: 13px;
+        width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .slider-group input[type="range"] {
+        width: 60%;
+        height: 6px;
+    }
+
+    .slider-group input[type="range"]::-webkit-slider-runnable-track {
+        height: 6px;
+    }
+
+    .slider-group input[type="range"]::-webkit-slider-thumb {
+        width: 18px;
+        height: 18px;
+        margin-top: -6px;
+    }
+
+    .slider-group input[type="range"]::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        margin-top: -6px;
+    }
+
+    .slider-group input[type="range"]::-moz-range-track {
+        height: 6px;
+    }
+
+    .slider-group input[type="range"]::-moz-range-progress {
+        height: 6px;
+    }
+
+    .slider-group span {
+        font-size: 13px;
+        min-width: 35px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .password-options {
+        gap: 10px;
+        margin-top: 12px;
+    }
+
+    .length-slider-container {
+        max-width: 300px;
+        margin-top: -3px;
+    }
+
+    .length-slider-container label {
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .length-slider-container input[type="range"] {
+        height: 4px;
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-runnable-track {
+        height: 4px;
+    }
+
+    .length-slider-container input[type="range"]::-webkit-slider-thumb {
+        width: 12px;
+        height: 12px;
+        transform: translateY(-4px);
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        transform: translateY(-4px);
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-track {
+        height: 4px;
+    }
+
+    .length-slider-container input[type="range"]::-moz-range-progress {
+        height: 4px;
+    }
+
+    .length-slider-container #length-value {
+        font-size: 12px;
+    }
+
+    .creative-length-display {
+        font-size: 12px;
+        margin-top: -4px;
+    }
+
+    #creative-length-value {
+        font-size: 12px;
+    }
+
+    .options-container {
+        max-width: 90%;
+        padding: 0;
+        position: relative;
+        height: auto;
+    }
+
+    .options-container.random-options {
+        /* Corrigé pour cibler le même élément */
+        width: 100%;
+        max-width: 400px;
+        margin: 22px auto;
+        /* Deuxième bloc, plus grand que 5px du premier */
+        padding: 5px;
+        /* Premier bloc, plus compact que 6px 10px du deuxième */
+        min-height: unset;
+    }
+
+    .random-options .slider-group {
+        flex-direction: column;
+        /* Premier bloc, passe en colonne */
+        align-items: flex-start;
+        gap: 5px;
+        /* Premier bloc, plus compact que 4px du deuxième */
+        margin: 5px 0;
+        /* Premier bloc, plus compact que 4px du deuxième */
+    }
+
+    .slider-group label {
+        font-size: 12px;
+        width: auto;
+        /* Premier bloc, pleine largeur au lieu de 100px */
+        white-space: nowrap;
+        /* Ajouté pour cohérence avec tablette */
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .slider-group input[type="range"] {
+        width: 100%;
+        /* Premier bloc, pleine largeur au lieu de 240px */
+        height: 5px;
+        /* Deuxième bloc, plus épais que 4px implicite du premier */
+    }
+
+    .slider-group input[type="range"]::-webkit-slider-runnable-track {
+        height: 5px;
+    }
+
+    .slider-group input[type="range"]::-webkit-slider-thumb {
+        width: 16px;
+        /* Deuxième bloc, plus gros que 12px implicite du premier */
+        height: 16px;
+        margin-top: -5px;
+        /* Ajusté pour hauteur 5px */
+    }
+
+    .slider-group input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        margin-top: -5px;
+    }
+
+    .slider-group input[type="range"]::-moz-range-track {
+        height: 5px;
+    }
+
+    .slider-group input[type="range"]::-moz-range-progress {
+        height: 5px;
+    }
+
+    .slider-group span {
+        font-size: 12px;
+        min-width: 30px;
+        text-align: left;
+        /* Premier bloc, alignement à gauche */
+    }
+}
+
+/* 
+ * Conteneur de configuration des caractères spéciaux
+ */
+.special-char-config {
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.special-char-config label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.special-char-config.random-mode {
+    position: relative;
+    display: inline-block;
+}
+
+/* Bouton Définir les caractères spéciaux (random) */
+#defineSpecialCharsRandom {
+    position: relative;
+    top: 15px;
+}
+
+#defineSpecialCharsRandom.active {
+    background: #0056b3;
+    border-color: #004080;
+}
+
+/* Style général des boutons modernes */
+.modern-button {
+    background: #007bff;
+    border: 1px solid #0056b3;
+    border-radius: 12px;
+    padding: 4px 12px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.modern-button:hover {
+    background: #0056b3;
+    color: white;
+}
+
+/* 
+ * Fenêtre modale des caractères spéciaux (random)
+ * Positionnée sous le bouton avec décalage à gauche
+ */
+#specialCharsWindowRandom {
+    position: absolute;
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    width: fit-content;
+    min-width: 300px;
+    max-width: 600px;
+    top: calc(100% + 20px);
+    left: -20px;
+}
+
+/* Style général de la fenêtre (moins prioritaire que #specialCharsWindowRandom) */
+.special-chars-window {
+    position: absolute;
+    width: 560px;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 10px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+}
+
+.special-chars-window.hidden {
+    display: none;
+}
+
+.special-chars-window label {
+    display: flex;
+    align-items: center;
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    color: #555;
+    margin: 5px 0;
+}
+
+.special-chars-window input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .special-char-config {
+        margin-bottom: 8px;
+        font-size: 15px;
+    }
+
+    .special-char-config label {
+        gap: 6px;
+        font-size: 14px;
+    }
+
+    #defineSpecialCharsRandom {
+        top: 12px;
+    }
+
+    .modern-button {
+        padding: 3px 10px;
+        font-size: 13px;
+    }
+
+    #specialCharsWindowRandom {
+        min-width: 280px;
+        max-width: 90%;
+        /* Adapté à l’écran */
+        padding: 12px;
+        top: calc(100% + 15px);
+        left: -15px;
+    }
+
+    .special-chars-window {
+        width: 90%;
+        max-width: 500px;
+        padding: 8px;
+    }
+
+    .special-chars-window label {
+        font-size: 11px;
+        margin: 4px 0;
+    }
+
+    .special-chars-window input[type="checkbox"] {
+        margin-right: 4px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .special-char-config {
+        margin-bottom: 6px;
+        font-size: 14px;
+    }
+
+    .special-char-config label {
+        gap: 5px;
+        font-size: 13px;
+    }
+
+    #defineSpecialCharsRandom {
+        top: 10px;
+    }
+
+    .modern-button {
+        padding: 2px 8px;
+        font-size: 12px;
+    }
+
+    :root {
+        --chars-pop-gap: -20px;
+    }
+
+    #specialCharsWindowRandom {
+        min-width: 260px;
+        max-width: 90%;
+        padding: 10px;
+        top: calc(100% + var(--chars-pop-gap));
+        left: -10px;
+        z-index: 1002;
+    }
+
+    .special-chars-window {
+        width: 90%;
+        max-width: 400px;
+        padding: 6px;
+    }
+
+    .special-chars-window label {
+        font-size: 10px;
+        margin: 3px 0;
+    }
+
+    .special-chars-window input[type="checkbox"] {
+        margin-right: 3px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+/* Conteneur Tout sélectionner */
+.toggle-all-modern {
+    margin-bottom: 15px;
+}
+
+/* Checkbox personnalisé */
+.modern-checkbox {
+    display: flex;
+    align-items: center;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    font-weight: 300;
+    color: #333;
+    cursor: pointer;
+    white-space: nowrap;
+    gap: 8px;
+}
+
+.modern-checkbox input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.modern-checkbox .checkbox-icon {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #6C757D;
+    border-radius: 4px;
+    position: relative;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.modern-checkbox input[type="checkbox"]:checked+.checkbox-icon {
+    background: #6C757D;
+    border-color: #6C757D;
+}
+
+.modern-checkbox input[type="checkbox"]:checked+.checkbox-icon::after {
+    content: '✔';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+}
+
+.modern-checkbox:hover .checkbox-icon {
+    border-color: #5A6268;
+}
+
+/* 
+ * Conteneur des options de caractères
+ * Disposition en 3 lignes horizontales sur grand écran
+ */
+.random-char-options {
+    display: grid;
+    grid-template-rows: repeat(3, auto);
+    grid-auto-flow: column;
+    gap: 8px 10px;
+    width: 100%;
+}
+
+.random-char-options label {
+    display: flex;
+    align-items: center;
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    color: #555;
+    width: auto;
+    margin-right: 0;
+}
+
+.random-char-options input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.char-row {
+    display: contents;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .toggle-all-modern {
+        margin-bottom: 12px;
+    }
+
+    .modern-checkbox {
+        font-size: 13px;
+        gap: 6px;
+    }
+
+    .modern-checkbox .checkbox-icon {
+        width: 14px;
+        height: 14px;
+    }
+
+    .modern-checkbox input[type="checkbox"]:checked+.checkbox-icon::after {
+        font-size: 10px;
+    }
+
+    .random-char-options {
+        gap: 6px 8px;
+        /* Réduit légèrement */
+    }
+
+    .random-char-options label {
+        font-size: 11px;
+    }
+
+    .random-char-options input[type="checkbox"] {
+        margin-right: 4px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .toggle-all-modern {
+        margin-bottom: 10px;
+    }
+
+    .modern-checkbox {
+        font-size: 12px;
+        gap: 5px;
+    }
+
+    .modern-checkbox .checkbox-icon {
+        width: 12px;
+        height: 12px;
+    }
+
+    .modern-checkbox input[type="checkbox"]:checked+.checkbox-icon::after {
+        font-size: 9px;
+    }
+
+    .random-char-options {
+        display: grid;
+        grid-template-rows: repeat(4, auto);
+        /* 4 lignes horizontales */
+        grid-auto-flow: column;
+        /* Éléments en colonnes sur 4 lignes */
+        gap: 8px 12px;
+        /* Espacement vertical 8px, horizontal 12px */
+        width: 100%;
+        /* Pleine largeur */
+    }
+
+    .random-char-options label {
+        font-size: 12px;
+        /* Plus gros pour lisibilité */
+        display: flex;
+        align-items: center;
+    }
+
+    .random-char-options input[type="checkbox"] {
+        margin-right: 5px;
+        width: 14px;
+        height: 14px;
+    }
+
+
+}
+
+@media (max-width: 480px) {
+
+    /* Réglages finaux (tu peux les ajuster à l’œil) */
+    :root {
+        --special-chars-width: clamp(340px, 96vw, 420px);
+        /* ↑ augmente si tu veux plus large */
+        --special-chars-anchor: -40%;
+        /* -35% / -30% = étire encore + à droite */
+        --special-chars-nudge-x: clamp(16px, 12vw, 80px);
+        /* petit décalage vers la droite */
+    }
+
+    #specialCharsWindowRandom {
+        position: absolute;
+        bottom: calc(100% + 6px);
+        /* AU-DESSUS du bouton */
+        top: auto;
+
+        /* centre sur le bouton, mais ancre à 40% (→ pousse la largeur vers la droite)
+       et ajoute une petite poussette vers la droite */
+        left: 50%;
+        transform: translateX(calc(var(--special-chars-anchor) + var(--special-chars-nudge-x)));
+
+        width: var(--special-chars-width);
+        max-height: min(60vh, 420px);
+        overflow: auto;
+
+        padding: 10px;
+        z-index: 1002;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 
+ * Groupe de boutons de mise en forme
+ * Aligne les boutons horizontalement
+ */
+.button-group {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    max-width: 600px;
+    width: 100%;
+    margin: 15px auto 0;
+}
+
+/* Style commun aux boutons */
+.button-group button {
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+    /* Ajouté transform */
+}
+
+/* Survol des boutons */
+.button-group button:hover {
+    background-color: #0056b3;
+}
+
+/* État actif ou clic */
+.button-group button:active,
+.button-group button.active {
+    background: #004080;
+    transform: scale(0.98);
+}
+
+/* Bouton désactivé */
+.button-group button:disabled {
+    background: #ccc;
+    color: #666;
+    border: 1px solid #888;
+    cursor: not-allowed;
+}
+
+/* Modes spécifiques pour #capitalizeFirstButton */
+#capitalizeFirstButton.uppercase-mode {
+    background-color: #007BFF;
+    color: white;
+}
+
+#capitalizeFirstButton.lowercase-mode {
+    background-color: #629fe0;
+    color: white;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .button-group {
+        gap: 15px;
+        /* Réduit l’espacement */
+        max-width: 90%;
+        /* Adapté à l’écran */
+        margin: 12px auto 0;
+    }
+
+    .button-group button {
+        padding: 6px 8px;
+        /* Réduit */
+        font-size: 13px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .button-group {
+        display: flex;
+        flex-direction: row;
+        /* Une seule ligne horizontale */
+        justify-content: center;
+        /* Centre les boutons */
+        gap: 10px;
+        /* Espacement entre boutons */
+        max-width: 90%;
+        /* Limite à 90% de l’écran */
+        margin: 10px auto 0;
+    }
+
+    .button-group button {
+        padding: 8px 12px;
+        /* Augmenté pour plus de surface */
+        font-size: 14px;
+        /* Plus gros que 12px pour lisibilité */
+        width: calc(33% - 6.67px);
+        /* 33% moins l’espace du gap (10px / 3 boutons) */
+        max-width: none;
+        /* Supprime la limite de 200px */
+        margin: 0;
+        /* Supprime le centrage individuel */
+        touch-action: manipulation;
+        /* Garde la réactivité tactile */
+    }
+
+    /* Assure que #capitalizeFirstButton suit les mêmes styles */
+    #capitalizeFirstButton {
+        padding: 8px 12px;
+        font-size: 14px;
+        width: calc(33% - 6.67px);
+        margin: 0;
+    }
+}
+
+
+
+
+
+
+
+/* 
+ * Conteneur principal de l’écran commun
+ * Englobe l’affichage et les contrôles d’insertion
+ */
+.common-container {
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 6px 20px;
+    margin: 25px auto 20px;
+    max-width: 610px;
+    width: 100%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    position: relative;
+}
+
+/* 
+ * Écran commun pour les boîtes
+ * Contient l’affichage du mot sélectionné
+ */
+.common-screen {
+    max-width: 400px;
+    width: 100%;
+    margin: 15px auto 0;
+    position: relative;
+}
+
+/* 
+ * Affichage du mot sélectionné
+ * Zone grisée avec texte bleu
+ */
+.selected-word-display {
+    min-height: 30px;
+    padding: 6px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #F5F5F5;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #0056b3;
+    text-align: center;
+    overflow: hidden;
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+}
+
+/* 
+ * Zone des modes d’insertion
+ * Contient les contrôles
+ */
+.insert-section {
+    position: relative;
+    margin-top: 3px;
+}
+
+/* 
+ * Conteneur des contrôles d’insertion
+ * Aligne le sélecteur et le bouton
+ */
+.insert-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 45px;
+}
+
+/* 
+ * Conteneur du sélecteur
+ * Centre le menu déroulant
+ */
+.box-selector {
+    display: flex;
+    justify-content: center;
+}
+
+/* 
+ * Menu déroulant de sélection de boîte
+ * Style personnalisé avec flèche bleue
+ */
+.box-selector select#boxType {
+    padding: 6px 12px;
+    font-size: 13px;
+    background-color: #F5F5F5;
+    color: #0056b3;
+    border: 1px solid #007BFF;
+    border-radius: 16px;
+    cursor: pointer;
+    width: auto;
+    min-width: 170px;
+    font-family: 'Roboto', sans-serif;
+    box-sizing: border-box;
+    /* Supprimé : appearance: none */
+}
+
+.box-selector select#boxType:hover {
+    background-color: #E0E0E0;
+}
+
+.box-selector select#boxType option {
+    background-color: #FFFFFF;
+    color: #333;
+}
+
+/* 
+ * Bouton Insérer
+ * Style bleu avec effet au survol
+ */
+.insert-button {
+    padding: 3px 10px;
+    font-size: 14px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.insert-button:hover {
+    background-color: #0056b3;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .common-container {
+        max-width: 90%;
+        padding: 6px 15px;
+        /* Réduit sur les côtés */
+        margin: 15px auto;
+    }
+
+    .common-screen {
+        max-width: 90%;
+        /* Plus flexible */
+    }
+
+    .selected-word-display {
+        font-size: 13px;
+        padding: 5px;
+        margin-bottom: 8px;
+    }
+
+    .insert-controls {
+        margin-bottom: 35px;
+        /* Réduit */
+    }
+
+    .box-selector select#boxType {
+        padding: 5px 10px;
+        font-size: 12px;
+        min-width: 150px;
+        padding-right: 25px;
+        /* Ajusté pour flèche */
+    }
+
+    .insert-button {
+        padding: 3px 8px;
+        font-size: 13px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .common-container {
+        max-width: 90%;
+        padding: 4px 10px;
+        margin: 10px auto;
+        min-height: 450px;
+    }
+
+    .common-screen {
+        max-width: 100%;
+        /* Pleine largeur */
+        min-height: 50px;
+        /* Plus d’espace vertical */
+    }
+
+    .selected-word-display {
+        font-size: 14px;
+        /* Typo bleue plus grande */
+        padding: 6px;
+        margin-bottom: 8px;
+        min-height: 40px;
+        /* Adapté à la typo */
+    }
+
+    .insert-section {
+        margin-top: 2px;
+    }
+
+    .insert-controls {
+        display: flex;
+        flex-direction: row;
+        /* Ligne horizontale */
+        justify-content: space-between;
+        /* Sélecteur à gauche, bouton à droite */
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .box-selector select#boxType {
+        padding: 6px 10px;
+        /* Augmenté de 4px 8px */
+        font-size: 13px;
+        /* Augmenté de 11px */
+        min-width: 150px;
+        /* Légèrement plus large */
+        padding-right: 25px;
+        /* Ajusté pour flèche */
+        width: auto;
+        max-width: 45%;
+        /* Garde la position à gauche */
+    }
+
+    .insert-button {
+        padding: 5px 8px;
+        /* Augmenté de 3px 6px */
+        font-size: 14px;
+        /* Augmenté de 12px */
+        width: auto;
+        max-width: 140px;
+        /* Légèrement plus large */
+    }
+}
+
+
+
+
+
+/* 
+ * Groupe des boutons d’insertion
+ * Positionné sous le parent pour les modes d’insertion
+ */
+#insertButtonsGroup {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 8px;
+    min-height: 30px;
+}
+
+#insertButtonsGroup.hidden {
+    display: none;
+}
+
+#insertButtonsGroup button {
+    padding: 4px 8px;
+    font-size: 12px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #f8f9fa;
+    color: #555;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    min-width: 90px;
+    text-align: center;
+}
+
+#insertButtonsGroup button:hover {
+    background-color: #e9ecef;
+}
+
+#insertButtonsGroup button.active {
+    background-color: #007bff;
+    color: white;
+}
+
+#addSeparatorButton {
+    background-color: #17a2b8;
+    color: white;
+}
+
+#addSeparatorButton:hover {
+    background-color: #138496;
+}
+
+#addSeparatorButton.active {
+    background-color: #0d6efd;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    #insertButtonsGroup {
+        gap: 5px;
+        margin-top: 6px;
+    }
+
+    #insertButtonsGroup button {
+        padding: 3px 6px;
+        font-size: 11px;
+        min-width: 80px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    #insertButtonsGroup {
+        display: grid;
+        /* Grille pour 2 lignes */
+        grid-template-columns: repeat(3, 1fr);
+        /* 3 colonnes égales pour le haut */
+        grid-template-rows: auto auto;
+        /* 2 lignes */
+        gap: 8px;
+        /* Écart uniforme entre tous les boutons */
+        justify-items: center;
+        /* Centre les boutons dans leurs cellules */
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 5px;
+        padding: 0 8px;
+        /* Espace latéral */
+        width: 100%;
+        /* Pleine largeur */
+        max-width: none;
+        /* Supprime toute limite */
+    }
+
+    #insertButtonsGroup.hidden {
+        display: none;
+    }
+
+    #insertButtonsGroup button {
+        padding: 4px 8px;
+        /* Taille raisonnable */
+        font-size: 12px;
+        /* Typo lisible */
+        border: 1px solid #E0E0E0;
+        border-radius: 12px;
+        background-color: #f8f9fa;
+        color: #555;
+        cursor: pointer;
+        transition: background-color 0.2s ease, color 0.2s ease;
+        min-width: 0;
+        width: 100%;
+        /* Pleine largeur de la cellule */
+        white-space: nowrap;
+        /* Texte sur une ligne */
+        text-align: center;
+    }
+
+    #insertButtonsGroup button:hover {
+        background-color: #e9ecef;
+    }
+
+    #insertButtonsGroup button.active {
+        background-color: #007bff;
+        color: white;
+    }
+
+    /* Positionnement spécifique pour 3 en haut, 2 en bas centrés */
+    #insertButtonsGroup button:nth-child(1),
+    #insertButtonsGroup button:nth-child(2),
+    #insertButtonsGroup button:nth-child(3) {
+        grid-row: 1;
+        /* Première ligne */
+    }
+
+    #insertButtonsGroup button:nth-child(4) {
+        grid-row: 2;
+        /* Deuxième ligne */
+        grid-column: 1 / span 2;
+        /* Étend sur les colonnes 1 et 2 */
+        width: auto;
+        /* Largeur naturelle */
+        margin-right: 4px;
+        /* Moitié du gap pour centrage */
+    }
+
+    #insertButtonsGroup button:nth-child(5) {
+        grid-row: 2;
+        /* Deuxième ligne */
+        grid-column: 2 / span 2;
+        /* Étend sur les colonnes 2 et 3 */
+        width: auto;
+        /* Largeur naturelle */
+        margin-left: 4px;
+        /* Moitié du gap pour centrage */
+    }
+}
+
+/* 
+ * Fenêtre modale des séparateurs
+ * Positionnée plus bas et plus large
+ */
+#separatorModal {
+    position: absolute;
+    top: calc(100% + 8px);
+    /* Descendue pour ne pas recouvrir le bouton */
+    left: 50%;
+    transform: translate(-50%, 0);
+    background-color: #fff;
+    border: 2px solid #007bff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    width: fit-content;
+    /* Suit la largeur des options */
+    min-width: 550px;
+    /* Largeur minimale pour 10 options par ligne */
+    min-height: 155px;
+    /* Hauteur minimale augmentée */
+    max-width: 90%;
+    /* Limite maximale */
+    text-align: center;
+    z-index: 1000;
+    transition: opacity 0.3s ease;
+}
+
+#separatorModal.hidden {
+    display: none;
+}
+
+/* Titre en bleu */
+#separatorModal h3 {
+    color: #007bff;
+    margin: 0 0 10px;
+}
+
+/* Conteneur des options de séparateurs */
+.separator-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+/* Chaque ligne de séparateurs */
+.separator-row {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+/* Styles pour les labels dans separator-options */
+.separator-options label {
+    display: flex;
+    align-items: center;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #555;
+    cursor: pointer;
+    white-space: nowrap;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.separator-options input[type="checkbox"] {
+    margin-right: 5px;
+    background-color: #fff;
+    border: 1px solid #E0E0E0;
+    width: 16px;
+    height: 16px;
+    appearance: none;
+    position: relative;
+    cursor: pointer;
+}
+
+.separator-options input[type="checkbox"]:checked::after {
+    content: '✔';
+    color: white;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+}
+
+/* Bouton Valider */
+#validateSeparator {
+    background-color: #007bff !important;
+    color: white !important;
+    border: none !important;
+    padding: 10px 15px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+    margin-top: 10px;
+}
+
+#validateSeparator:hover {
+    background-color: #0056b3 !important;
+}
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    #separatorModal {
+        min-width: 550px;
+        /* Élargi de 450px à 500px pour couvrir toutes les colonnes */
+        max-width: 90%;
+        padding: 15px;
+        min-height: 160px;
+    }
+
+    #separatorModal h3 {
+        font-size: 15px;
+        margin-bottom: 8px;
+    }
+
+    .separator-options {
+        gap: 8px;
+        margin: 8px 0;
+    }
+
+    .separator-row {
+        gap: 12px;
+    }
+
+    .separator-options label {
+        font-size: 13px;
+    }
+
+    .separator-options input[type="checkbox"] {
+        width: 14px;
+        height: 14px;
+    }
+
+    .separator-options input[type="checkbox"]:checked::after {
+        font-size: 10px;
+    }
+
+    #validateSeparator {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    #separatorModal {
+        min-width: 340px;
+        /* Élargi de 300px à 340px pour recouvrir les typos */
+        max-width: 95%;
+        padding: 10px;
+        min-height: 120px;
+        top: calc(100% + 5px);
+        left: 48%;
+        /* Centré */
+        transform: translate(-50%, 0);
+        /* Parfaitement centré dans l’axe */
+    }
+
+    #separatorModal h3 {
+        font-size: 14px;
+        margin-bottom: 6px;
+    }
+
+    .separator-options {
+        gap: 6px;
+        margin: 6px 0;
+    }
+
+    .separator-row {
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-start;
+    }
+
+    .separator-options label {
+        font-size: 12px;
+        padding: 2px 4px;
+    }
+
+    .separator-options input[type="checkbox"] {
+        width: 12px;
+        height: 12px;
+        margin-right: 4px;
+    }
+
+    .separator-options input[type="checkbox"]:checked::after {
+        font-size: 9px;
+    }
+
+    #validateSeparator {
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+}
+
+.separator-checkbox.order-0 {
+    background-color: #003087 !important;
+}
+
+/* Bleu très foncé */
+.separator-checkbox.order-1 {
+    background-color: #3399ff !important;
+}
+
+/* Bleu clair, différence nette */
+.separator-checkbox.order-2 {
+    background-color: #66b3ff !important;
+}
+
+/* Encore plus clair */
+.separator-checkbox.order-3 {
+    background-color: #99ccff !important;
+}
+
+/* Très clair */
+.separator-checkbox.order-4 {
+    background-color: #cce6ff !important;
+}
+
+.separator-checkbox.order-5 {
+    background-color: #e6f0ff !important;
+}
+
+.separator-checkbox.order-6 {
+    background-color: #b3e6e6 !important;
+}
+
+/* Transition vers cyan */
+.separator-checkbox.order-7 {
+    background-color: #80d9d9 !important;
+}
+
+.separator-checkbox.order-8 {
+    background-color: #4dcccc !important;
+}
+
+.separator-checkbox.order-9 {
+    background-color: #33b3b3 !important;
+}
+
+.separator-checkbox.order-10 {
+    background-color: #1a9999 !important;
+}
+
+.separator-checkbox.order-11 {
+    background-color: #008080 !important;
+}
+
+/* Teal */
+.separator-checkbox.order-12 {
+    background-color: #006666 !important;
+}
+
+.separator-checkbox.order-13 {
+    background-color: #004d4d !important;
+}
+
+.separator-checkbox.order-14 {
+    background-color: #003333 !important;
+}
+
+.separator-checkbox.order-15 {
+    background-color: #00cc00 !important;
+}
+
+/* Vert */
+.separator-checkbox.order-16 {
+    background-color: #33ff33 !important;
+}
+
+.separator-checkbox.order-17 {
+    background-color: #66ff66 !important;
+}
+
+.separator-checkbox.order-18 {
+    background-color: #99ff99 !important;
+}
+
+.separator-checkbox.order-19 {
+    background-color: #ccffcc !important;
+}
+
+.separator-checkbox.order-20 {
+    background-color: #ffff00 !important;
+}
+
+/* Jaune */
+.separator-checkbox.order-21 {
+    background-color: #ffff33 !important;
+}
+
+.separator-checkbox.order-22 {
+    background-color: #ffff66 !important;
+}
+
+.separator-checkbox.order-23 {
+    background-color: #ffff99 !important;
+}
+
+.separator-checkbox.order-24 {
+    background-color: #ffcc00 !important;
+}
+
+/* Orange */
+.separator-checkbox.order-25 {
+    background-color: #ff9900 !important;
+}
+
+.separator-checkbox.order-26 {
+    background-color: #ff6600 !important;
+}
+
+.separator-checkbox.order-27 {
+    background-color: #ff3300 !important;
+}
+
+/* Rouge orangé */
+.separator-checkbox.order-28 {
+    background-color: #cc0000 !important;
+}
+
+/* Rouge foncé */
+.separator-checkbox.order-29 {
+    background-color: #990000 !important;
+}
+
+/* Rouge très foncé */
+
+
+
+/* Checkboxes dans #wordBox */
+.box-container#wordBox .checkbox-group {
+    max-width: 560px;
+    margin: 0 auto 10px;
+}
+
+/* Boîte à Mots */
+.box-container#wordBox {
+    /*max-width: 600px;
+    width: 100%;
+    height: 250px;
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 10px 20px;
+    margin: 10px auto 0;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    position: relative;  Contexte pour absolute */
+    overflow-y: auto;
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .box-container#wordBox {
+        margin-top: 85px;
+        /* Descendu comme précédemment */
+        max-width: 95%;
+        padding: 6px 10px;
+        height: auto;
+        /* Supprime la hauteur fixe pour s’adapter au contenu */
+        overflow-y: visible;
+    }
+}
+
+
+/* Positionnement par rapport à #wordBox */
+#wordBox {
+    position: relative;
+    /* Point de référence pour #specialCharsWindow */
+}
+
+/* Conteneur des sliders */
+.creative-sliders-container {
+    max-width: 560px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Curseurs */
+.creative-slider-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    transform: translateY(5px);
+    font-size: 0.9rem;
+    max-width: 560px;
+}
+
+.creative-slider-group label {
+    flex: 1;
+    text-align: left;
+    font-size: 0.85rem;
+}
+
+.creative-slider-group input[type="range"] {
+    flex: 2;
+    max-width: 220px;
+    height: 6px;
+}
+
+.creative-slider-group span {
+    flex: 1;
+    text-align: right;
+    font-size: 0.85rem;
+}
+
+.generated-word-display {
+    min-height: 30px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    color: #555555;
+    margin-bottom: 10px;
+}
+
+/* Écran masqué */
+.generated-word-display {
+    visibility: hidden;
+    opacity: 0;
+    position: absolute;
+    height: 0;
+    overflow: hidden;
+}
+
+
+/* Dans ton style.css, remplace ou ajuste le style de #specialCharsWindow */
+
+#specialCharsWindow {
+    position: absolute;
+    top: -150px;
+    /* Garde ta position verticale */
+    left: calc(100% - 300px);
+    /* Garde ta position horizontale */
+    transform: translate(-315px, 285px);
+    /* Garde ton ajustement fin */
+    width: 550px;
+    /* Agrandi pour accueillir tous les caractères */
+    max-height: 80vh;
+    /* Limite la hauteur à 80% de la fenêtre */
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    /* Bords arrondis */
+    padding: 10px;
+    z-index: 1000;
+    overflow-y: auto;
+    /* Scroll si trop de contenu */
+}
+
+
+
+
+
+
+.close-window {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+/* Conteneur des options */
+.char-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    /* Espacement entre les lignes */
+}
+
+/* Chaque ligne de caractères pour le mode créatif */
+.char-row-creative {
+    display: flex;
+    flex-wrap: nowrap;
+    /* Pas de retour à la ligne, reste sur une ligne */
+    justify-content: space-between;
+    /* Répartit les éléments */
+    gap: 5px;
+    /* Espacement entre les cases */
+}
+
+/* Style des labels et checkboxes */
+.char-row-creative label {
+    flex: 0 0 calc(100% / 11 - 5px);
+    /* Conservé : 11 éléments par ligne */
+    text-align: center;
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #555;
+    cursor: pointer;
+}
+
+.char-row-creative input[type="checkbox"] {
+    margin-right: 3px;
+    /* Espacement léger avant le caractère */
+}
+
+/* Hors body.dark-theme, dans le CSS général */
+#specialCharsWindow label:has(#toggleAllSpecialCharsCreative) {
+    font-size: 16px;
+    /* Grossie pour tous les thèmes */
+}
+
+/* Dans body.dark-theme, garde juste la couleur */
+body.dark-theme #specialCharsWindow label:has(#toggleAllSpecialCharsCreative) {
+    color: #e0e0e0;
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    #specialCharsWindow {
+        width: 340px;
+        min-height: 165px;
+        /* Réduit pour 6 lignes compactes */
+        top: calc(100% - 298px);
+        /* Décalé vers le bas pour laisser le bouton visible */
+        left: 50%;
+        transform: translate(-50%, 0);
+        padding: 10px;
+        background: #FFFFFF;
+        border: 1px solid #E0E0E0;
+        border-radius: 12px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+    }
+
+    body.dark-theme #specialCharsWindow {
+        background: #3a3a3a;
+        border-color: #555;
+        color: #e0e0e0;
+    }
+
+    .char-options {
+        display: block;
+    }
+
+    .char-row-creative {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1px;
+        justify-content: flex-start;
+    }
+
+    .char-row-creative label {
+        font-size: 12px;
+        flex: 0 0 calc(11.11% - 1px);
+        /* 9 par ligne */
+        max-width: calc(11.11% - 1px);
+    }
+}
+
+
+.word-list {
+    /*background: #FFFFFF; /* Fond blanc pour les mots */
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    padding: 10px;
+    min-height: 40px;
+    /* Hauteur minimale */
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    color: #333333;
+}
+
+/* Style commun pour tous les boutons dans .word-options */
+.word-options button {
+    padding: 6px 12px;
+    background: #B0B0B0;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 16px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    min-width: 100px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+/* Options centrées verticalement avec plus d’interlignage */
+.word-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    /* Augmenté de 10px à 15px pour plus d’espace */
+    margin-top: 10px;
+    align-items: center;
+}
+
+.word-options label {
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+    font-size: 14px;
+    color: #555555;
+    min-width: 120px;
+    /* Alignement cohérent */
+    text-align: right;
+    /* Label à droite pour centrage */
+}
+
+.word-options select,
+.word-options input {
+    padding: 6px 12px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    font-family: 'Roboto', sans-serif;
+    font-size: 13px;
+    color: #333333;
+    background: #FFFFFF;
+    width: 100%;
+    max-width: 200px;
+    box-sizing: border-box;
+}
+
+.word-options button#toggle-special-chars {
+    min-width: 180px !important;
+    /* Élargi pour une ligne, force l’application */
+}
+
+.word-options button:hover {
+    background: #888888;
+    /* Gris plus foncé au survol */
+}
+
+/* Groupe d’options */
+.option-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    /* Assure une largeur cohérente */
+    max-width: 400px;
+    /* Limite pour centrage */
+    justify-content: center;
+    /* Centre le contenu */
+}
+
+
+/* Style général pour .word-options (probable) */
+.phrase-generator .word-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    /* Espacement entre les option-group */
+}
+
+/* Groupe spécifique pour la case et le bouton */
+.option-group.special-chars-group {
+    gap: 6px !important;
+    justify-content: center;
+    width: auto;
+    display: inline-flex;
+    margin-top: 50px;
+    /* Descend de 20px dans le grand format */
+}
+
+/* Groupe spécifique pour la case et le bouton (surcharge supplémentaire) */
+div.option-group.special-chars-group {
+    gap: 4px !important;
+    /* Forcer l’écart réduit */
+}
+
+/* Ligne des boutons bien alignée avec marge en bas */
+.button-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 400px;
+    margin-bottom: 15px;
+    /* Ajouté pour augmenter l’espace en bas */
+}
+
+
+/* Bouton Précédent stylisé */
+#previousWord {
+    padding: 6px 12px;
+    /* Aligné avec les autres boutons */
+    background: #B0B0B0;
+    /* Gris neutre, comme #generateWords */
+    color: #FFFFFF;
+    border: none;
+    border-radius: 16px;
+    /* Très arrondi, comme #defineSpecialChars */
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+/* Bouton "Avec caractères spéciaux" avec spécificité accrue */
+
+
+#previousWord:hover {
+    background: #888888;
+    /* Gris plus foncé au survol */
+}
+
+
+/* Responsive : Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    .box-container#generatorBox {
+        margin-top: 50px !important;
+        /* Descend un peu pour tablette */
+        position: relative !important;
+        /* Assure un positionnement dans le flux */
+    }
+
+    .word-list {
+        padding: 8px;
+        min-height: 35px;
+        font-size: 15px;
+    }
+
+    .word-options {
+        gap: 12px;
+        margin-top: 8px;
+    }
+
+    .word-options button {
+        padding: 5px 10px;
+        font-size: 12px;
+        min-width: 90px;
+        height: 26px;
+    }
+
+    .word-options button#toggle-special-chars {
+        min-width: 160px !important;
+    }
+
+    .word-options label {
+        font-size: 13px;
+        min-width: 100px;
+    }
+
+    .word-options select,
+    .word-options input {
+        padding: 5px 10px;
+        font-size: 12px;
+        max-width: 180px;
+    }
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .box-container#generatorBox {
+        margin-top: 80px !important;
+        /* Descend pour téléphone, fonctionne déjà */
+        position: relative !important;
+    }
+
+    .word-generator {
+        display: block;
+        width: 100%;
+    }
+
+    .word-list {
+        padding: 6px;
+        min-height: 30px;
+        font-size: 14px;
+    }
+
+    .word-list.hidden {
+        display: none;
+    }
+
+    .word-options {
+        gap: 10px;
+        margin-top: 6px;
+        align-items: stretch;
+    }
+
+    .option-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 400px;
+        justify-content: center;
+    }
+
+    .option-group.special-chars-group {
+        gap: 6px !important;
+        justify-content: center;
+        width: auto;
+        display: inline-flex;
+    }
+
+    div.option-group.special-chars-group {
+        gap: 4px !important;
+    }
+
+    .option-group.button-row {
+        flex-wrap: wrap;
+        gap: 6px;
+        justify-content: center;
+        margin-bottom: 15px;
+    }
+
+    .word-options label {
+        font-size: 12px;
+        min-width: 90px;
+        text-align: left;
+    }
+
+    .word-options select,
+    .word-options input {
+        padding: 4px 8px;
+        font-size: 11px;
+        max-width: 160px;
+    }
+
+    .word-options button {
+        padding: 4px 8px;
+        font-size: 11px;
+        min-width: 80px;
+        height: 24px;
+    }
+
+    #insertGeneratorBox {
+        padding: 4px 8px;
+        font-size: 11px;
+        min-width: 80px;
+        height: 24px;
+        background: #007bff;
+        color: #FFFFFF;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+    }
+
+    #insertGeneratorBox.hidden {
+        display: none;
+    }
+}
+
+
+@media (max-width: 480px) {
+    #specialCharsContainer {
+        width: 340px;
+        min-height: 110px;
+        top: calc(100% - 295px);
+        left: 50%;
+        transform: translate(-50%, 0);
+        padding: 10px;
+    }
+
+    .special-chars-list label {
+        flex: 0 0 calc(11.11% - 4px);
+        max-width: calc(11.11% - 4px);
+    }
+
+    .special-chars-group {
+        margin-top: 10px;
+        /* Moins descendu sur mobile */
+    }
+}
+
+/* Phrase générée */
+#generatedPhrase {
+    min-height: 30px;
+    /* Hauteur minimale pour visibilité */
+    font-family: 'Roboto', sans-serif;
+    /* Police spécifique */
+    font-size: 16px;
+    /* Taille choisie, plus spécifique que 1.2rem */
+    font-weight: bold;
+    /* Texte en gras */
+    color: #333;
+    /* Couleur unifiée */
+    text-align: center;
+    /* Centrage */
+    margin: 15px 0;
+    /* Marge verticale, choix de .phrase-generator p */
+    padding: 10px;
+    /* Espacement interne */
+    background: #f8f9fa;
+    /* Fond gris clair */
+    border-radius: 5px;
+    /* Coins arrondis */
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .box-container#phraseBox {
+        margin-top: 80px !important;
+        /* Descend pour éviter chevauchement avec #insertButtonsGroup */
+        position: relative !important;
+        /* Assure un positionnement dans le flux */
+    }
+
+    #generatedPhrase {
+        font-size: 14px;
+        /* Réduit pour téléphone */
+        padding: 8px;
+        margin: 10px 0;
+        min-height: 25px;
+    }
+}
+
+/* Bouton "Avec caractères spéciaux" */
+#toggle-special-chars {
+    padding: 6px 12px;
+    background: #B0B0B0;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 16px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 240px;
+    /* Élargi pour une ligne */
+}
+
+#toggle-special-chars:hover {
+    background: #888888;
+}
+
+/* Case à cocher */
+#use-special-chars {
+    margin-right: 0 !important;
+    /* Forcer l’absence de marge */
+}
+
+
+
+
+/* Bouton "Avec caractères spéciaux" */
+#toggle-special-chars {
+    padding: 6px 12px;
+    background: #B0B0B0;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 16px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-width: 150px;
+    /* Plus large pour le texte */
+}
+
+#toggle-special-chars:hover {
+    background: #888888;
+}
+
+
+/* Case à cocher seule */
+#use-special-chars {
+    margin-right: 0;
+    /* Pas d’espace supplémentaire à droite */
+}
+
+/* Fenêtre des caractères spéciaux */
+/* Style général pour #specialCharsContainer (grand format) */
+.special-chars-container {
+    position: absolute;
+    top: 58%;
+    left: 50%;
+    transform: translate(var(--translate-x, -50%), var(--translate-y, -50%));
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    max-width: 480px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.special-chars-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.special-chars-header h2 {
+    font-family: 'Roboto', sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    color: #333333;
+    margin: 0;
+}
+
+.special-chars-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    justify-content: flex-start;
+}
+
+.special-chars-list label {
+    font-size: 12px;
+    flex: 0 0 calc(9.09% - 2px);
+    max-width: calc(9.09% - 2px);
+    display: flex;
+    align-items: center;
+}
+
+body.dark-theme #specialCharsContainer {
+    background: #3a3a3a;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .special-chars-header h2 {
+    color: #e0e0e0;
+}
+
+
+
+
+
+.close-btn {
+    font-size: 18px;
+    cursor: pointer;
+    color: #555555;
+}
+
+.close-btn:hover {
+    color: #333333;
+}
+
+
+
+
+
+
+/* Ancien style : Fenêtre d’exportation */
+#exportPage {
+    position: fixed;
+    top: 27%;
+    left: 50%;
+    transform: translateX(-50%) translateY(0px);
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border: 1px solid #E0E0E0;
+    border-radius: 16px;
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+    max-width: 550px;
+    width: 100%;
+    padding: 15px;
+    /* Réduit pour compacter */
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    min-height: 300px;
+    /* Réduit pour 9 mots + textarea */
+}
+
+#exportPage h2 {
+    font-family: 'Roboto', sans-serif;
+    font-size: 18px;
+    /* Réduit */
+    font-weight: 500;
+    color: #333333;
+    margin: 0;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+}
+
+.back-button {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    padding: 5px 10px;
+    /* Réduit */
+    font-size: 13px;
+    /* Réduit */
+    font-weight: 500;
+    color: #007BFF;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.back-button:hover {
+    background-color: #007BFF;
+    color: #FFFFFF;
+}
+
+#exportContent {
+    width: 90%;
+    text-align: left;
+    margin-top: 40px;
+    /* Réduit pour compacter */
+    background: #f0f0f0;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 10px;
+    /* Réduit */
+    font-family: 'Roboto', sans-serif;
+    font-size: 14px;
+    color: #333333;
+}
+
+#exportContent p {
+    font-size: 14px;
+    line-height: 20px;
+    /* Réduit pour compacter */
+    font-weight: 400;
+    color: #333;
+    margin: 3px 0;
+    /* Réduit pour moins d’espace */
+    text-align: left;
+}
+
+#comments {
+    width: 90%;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    padding: 8px;
+    font-size: 14px;
+    margin: 5px 0 10px;
+    /* Espace naturel entre #exportContent et boutons */
+    font-family: 'Roboto', sans-serif;
+    resize: vertical;
+}
+
+.export-buttons {
+    display: flex;
+    justify-content: flex-end;
+    width: 90%;
+    margin-top: 5px;
+    /* Réduit */
+}
+
+.save-button {
+    background: #28A745;
+    color: #FFFFFF;
+    border: none;
+    padding: 6px 12px;
+    /* Réduit */
+    border-radius: 12px;
+    font-size: 13px;
+    /* Réduit */
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.save-button:hover {
+    background: #218838;
+}
+
+/* Tablettes (max-width: 768px) */
+@media (max-width: 768px) {
+    #exportPage {
+        --export-x-offset: -52%;
+        --export-y-position: 30%;
+        --export-width: 85%;
+        --export-min-height: 280px;
+        /* Réduit */
+        position: fixed;
+        top: var(--export-y-position);
+        left: 50%;
+        transform: translateX(var(--export-x-offset));
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 1px solid #E0E0E0;
+        border-radius: 16px;
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: var(--export-width);
+        padding: 12px;
+        z-index: 1000;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        min-height: var(--export-min-height);
+    }
+
+    #exportPage h2 {
+        font-size: 16px;
+        top: 8px;
+        right: 8px;
+    }
+
+    .back-button {
+        top: 8px;
+        left: 8px;
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+
+    #exportContent {
+        margin-top: 35px;
+        width: 90%;
+        padding: 8px;
+        font-size: 13px;
+    }
+
+    #exportContent p {
+        font-size: 13px;
+        line-height: 18px;
+        margin: 2px 0;
+    }
+
+    #comments {
+        width: 90%;
+        padding: 6px;
+        font-size: 13px;
+        margin: 4px 0 8px;
+    }
+
+    .export-buttons {
+        width: 90%;
+        margin-top: 4px;
+    }
+
+    .save-button {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+}
+
+/* Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    #exportPage {
+        --export-x-offset: -53%;
+        --export-y-position: 35%;
+        --export-width: 85%;
+        --export-min-height: 260px;
+        /* Réduit */
+        position: fixed;
+        top: var(--export-y-position);
+        left: 50%;
+        transform: translateX(var(--export-x-offset));
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        border: 1px solid #E0E0E0;
+        border-radius: 16px;
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2);
+        width: 100%;
+        max-width: var(--export-width);
+        padding: 10px;
+        z-index: 1000;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        min-height: var(--export-min-height);
+    }
+
+    #exportPage h2 {
+        font-size: 14px;
+        top: 6px;
+        right: 6px;
+    }
+
+    .back-button {
+        top: 6px;
+        left: 6px;
+        padding: 3px 6px;
+        font-size: 11px;
+    }
+
+    #exportContent {
+        margin-top: 30px;
+        width: 90%;
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    #exportContent p {
+        font-size: 12px;
+        line-height: 16px;
+        margin: 2px 0;
+    }
+
+    #comments {
+        width: 90%;
+        padding: 5px;
+        font-size: 12px;
+        margin: 3px 0 6px;
+    }
+
+    .export-buttons {
+        width: 90%;
+        margin-top: 3px;
+    }
+
+    .save-button {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@keyframes slideInFromLeft {
+    from {
+        transform: translateX(-100px);
+        /* 🔹 Départ plus loin à gauche */
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.animated-password {
+    display: inline-block;
+    /* ✅ Évite d'affecter l'écran */
+    animation: slideInFromLeft 0.25s ease-out;
+    /* 🔹 Vitesse 2x plus rapide */
+}
+
+
+
+
+
+
+/* Fenêtre de réglage sous l’écran principal */
+.font-settings-window {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    width: 300px;
+    height: 125px;
+    /* Hauteur fixe */
+    cursor: default;
+    user-select: none;
+}
+
+.font-settings-content h3 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    color: #333;
+    cursor: move;
+    user-select: none;
+}
+
+/* Garde le reste du CSS inchangé */
+
+.font-settings-window.hidden {
+    display: none;
+}
+
+
+
+/* Sélecteur de police */
+.font-selector {
+    margin-bottom: 15px;
+}
+
+.font-selector label {
+    font-size: 14px;
+    color: #555;
+    margin-right: 10px;
+}
+
+.font-selector select {
+    padding: 5px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    width: 150px;
+}
+
+/* Curseur de taille */
+.font-size-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.font-size-slider label {
+    font-size: 14px;
+    color: #555;
+}
+
+#fontSizeValue {
+    font-weight: bold;
+    color: #333;
+}
+
+#fontSizeSlider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #E0E0E0;
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+}
+
+#fontSizeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #888888;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    transform: translateY(0px);
+    /* Ajusté pour centrer visuellement */
+}
+
+#fontSizeSlider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #888888;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    transform: translateY(0px);
+    /* Ajusté pour centrer visuellement */
+}
+
+#fontSizeSlider::-webkit-slider-thumb:hover,
+#fontSizeSlider::-moz-range-thumb:hover {
+    background: #666666;
+}
+
+/* Responsive : Téléphones (max-width: 480px) */
+@media (max-width: 480px) {
+    .font-settings-window {
+        width: 90%;
+        bottom: 10px;
+        padding: 10px;
+    }
+
+    .font-settings-content h3 {
+        font-size: 14px;
+    }
+
+    .font-selector select {
+        width: 120px;
+        font-size: 12px;
+    }
+
+    .font-size-slider label {
+        font-size: 12px;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ✅ Bouton Insérer en couleur distincte */
+.insert-modes .insert-button {
+    background-color: #28a745;
+    color: white;
+    font-weight: bold;
+}
+
+.insert-modes .insert-button:hover {
+    background-color: #218838;
+}
+
+.insert-button-container {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+}
+
+
+
+
+/* Variables par défaut */
+:root {
+    --translate-x: -50%;
+    /* Centrage horizontal par défaut */
+    --translate-y: -60%;
+    /* Centrage vertical ajusté */
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ✅ Style des raccourcis clavier */
+.shortcut {
+    font-size: 12px;
+    color: #666;
+}
+
+
+
+
+
+
+
+
+
+
+/* ✅ Ajustement du bouton de fermeture */
+.close-button {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #444;
+    cursor: pointer;
+    position: absolute;
+    top: 10px;
+    left: 10px;
+}
+
+
+
+
+/* Style du conteneur de sélection */
+.custom-select-container {
+    display: inline-block;
+    margin-left: 10px;
+    position: relative;
+}
+
+/* Style du select */
+.custom-select {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #fff;
+    color: #333;
+    cursor: pointer;
+    width: 150px;
+    appearance: none;
+    /* Cache la flèche par défaut */
+    text-align: center;
+}
+
+/* Flèche personnalisée */
+.custom-select-container::after {
+    content: "▼";
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #555;
+    font-size: 0.8em;
+}
+
+/* Effet au survol */
+.custom-select:hover {
+    border-color: #007bff;
+}
+
+
+.word-display {
+    width: 100%;
+    height: 40px;
+    border: 2px solid #007bff;
+    border-radius: 6px;
+    background-color: #fff;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333;
+    font-weight: bold;
+    box-sizing: border-box;
+}
+
+
+/* ✅ Uniformiser et structurer les boutons en 3 lignes de 2 */
+.insert-modes {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    /* 2 boutons par ligne */
+    gap: 6px;
+    /* Espacement réduit et équilibré */
+    justify-content: center;
+    align-items: center;
+    margin-top: 5px;
+    width: 100%;
+    /* Assure que le conteneur reste aligné */
+}
+
+.insert-modes button {
+    width: 100%;
+    /* Tous les boutons prennent la même largeur */
+    height: 35px;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    background-color: hsl(216, 67%, 49%);
+    transition: background-color 0.3s ease;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+/* ✅ Effet au survol */
+.insert-modes button:hover {
+    background-color: rgba(0, 123, 255, 0.2);
+}
+
+
+
+
+
+.button-container {
+    display: flex;
+
+    flex-wrap: wrap;
+    /* Permet de passer à la ligne si l'espace est insuffisant */
+}
+
+
+
+.minuscule-mode {
+    background-color: #ADD8E6 !important;
+    /* Bleu clair */
+    color: #000 !important;
+    /* Texte noir pour contraste */
+}
+
+
+
+.active-button {
+    background-color: #004080 !important;
+    /* Bleu foncé */
+    color: white !important;
+    border: 1px solid #003366;
+    /* Optionnel : bordure plus marquée */
+}
+
+/* ✅ Gère l'organisation verticale et l'espacement des boutons .standalone */
+.special-button-group {
+    display: flex;
+    flex-direction: column;
+    /* Met les boutons en colonne */
+    align-items: center;
+    /* Centre les boutons horizontalement */
+    gap: 9px;
+    /* Augmente l’espacement vertical entre eux */
+    margin-bottom: 4px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ✅ Permet de bien afficher le bouton Anagramme */
+.anagram-button-container {
+    display: inline-block;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.uppercase-mode {
+    background-color: #2c86fc;
+    /* Bleu standard pour le mode majuscule */
+    color: white;
+}
+
+.lowercase-mode {
+    background-color: #0056b3;
+    /* Bleu plus foncé pour le mode minuscule */
+    color: white;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* 🎨 Style de la fenêtre modale pour le choix du séparateur */
+/* 📌 À modifier si besoin d'un effet plus fluide ou d'un meilleur positionnement */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Style général des boutons */
+button,
+.action-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 15px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s ease;
+    /* Animation fluide */
+}
+
+/* Effet au survol pour TOUS les boutons */
+button:hover,
+.action-button:hover {
+    background: #0056b3;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Indicateur de force */
+.strength-indicator {
+    margin-top: 20px;
+}
+
+
+
+
+input[type='range']:disabled {
+    background-color: #e9ecef;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.modal.hidden {
+    display: none;
+}
+
+
+/* Optionnel : arrière-plan semi-transparent lors de l'ouverture */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    display: none;
+}
+
+.overlay.visible {
+    display: block;
+}
+
+/* ✅ Petit écran dans la fenêtre d'options qui affiche la liste des mots */
+.word-display {
+    margin-top: 20px;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Style pour le conteneur des boutons d'insertion */
+#insertButtonsContainer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    /* Réduit de 4px à 3px (75%) */
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out;
+    max-width: 192px;
+    /* Réduit de 240px à 192px (80%) */
+    margin: 0 auto;
+}
+
+/* Quand masqué */
+#insertButtonsContainer.hidden {
+    display: none !important;
+    opacity: 0;
+}
+
+/* Première ligne : Gauche, Milieu, Droite */
+#insertButtonsContainer .first-row {
+    display: flex;
+    justify-content: center;
+    gap: 3px;
+    /* Réduit de 4px à 3px */
+    background: none;
+}
+
+/* Deuxième ligne : Deux bouts, Séparateur */
+#insertButtonsContainer .second-row {
+    display: flex;
+    justify-content: center;
+    gap: 3px;
+    /* Réduit de 4px à 3px */
+    width: fit-content;
+    margin: 0 auto;
+    background: none;
+}
+
+/* Style des boutons spécifiques dans #insertButtonsContainer */
+#insertLeft,
+#insertMiddle,
+#insertRight,
+#insertBothEnds,
+#insertSeparator {
+    padding: 3.2px 6.4px;
+    /* Réduit de 4px 8px à 80% (3.2px 6.4px) */
+    font-size: 0.64rem;
+    /* Réduit de 0.8rem à 80% (0.64rem) */
+    background-color: #007bff;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* Largeurs spécifiques pour la 1re ligne */
+#insertLeft,
+#insertMiddle,
+#insertRight {
+    width: 55px;
+    /* Réduit de 60px à 80% (48px) */
+}
+
+/* Largeurs spécifiques pour la 2e ligne */
+#insertBothEnds,
+#insertSeparator {
+    width: 70px;
+    /* Réduit de 80px à 80% (64px) */
+}
+
+/* Effet au survol pour les boutons */
+#insertLeft:hover,
+#insertMiddle:hover,
+#insertRight:hover,
+#insertBothEnds:hover,
+#insertSeparator:hover {
+    background-color: #0056b3;
+    transform: scale(1.05);
+}
+
+/* Style pour le bouton actif */
+#insertLeft.active,
+#insertMiddle.active,
+#insertRight.active,
+#insertBothEnds.active,
+#insertSeparator.active {
+    background-color: #004080;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Bouton "Insérer" reste à la taille normale */
+#insertButtonFenetre {
+    display: block;
+    padding: 4px 8px;
+    /* Taille originale */
+    font-size: 0.8rem;
+    /* Taille originale */
+    background-color: #28a745;
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    text-align: center;
+    margin: 4px auto 0;
+    width: 80px;
+    /* Taille originale */
+    white-space: nowrap;
+}
+
+#insertButtonFenetre:hover {
+    background-color: #218838;
+    transform: scale(1.05);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#insertGeneratedWordGenerator {
+    background-color: #28a745;
+    /* Vert pour différencier */
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#insertGeneratedWordGenerator:hover {
+    background-color: #218838;
+}
+
+
+
+
+#insertGeneratedWord {
+    background-color: #28a745;
+    /* ✅ Même vert */
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    /* ✅ Même taille */
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+/* ✅ Effet au survol */
+#insertGeneratedWord:hover {
+    background-color: #218838;
+    /* ✅ Vert plus foncé au survol */
+}
+
+
+/* 📌 Conteneur des deux boutons pour les aligner horizontalement */
+.insert-config-container {
+    display: flex;
+    justify-content: space-between;
+    /* ✅ Un à gauche, l'autre à droite */
+    align-items: center;
+    /* ✅ Alignement vertical */
+    width: 100%;
+    /* ✅ Utilise toute la largeur */
+    margin-top: 22px;
+    /* ✅ Espacement sous les curseurs */
+}
+
+/* 📌 Bouton "Définir les caractères spéciaux" aligné à gauche */
+#defineSpecialChars {
+    flex-grow: 0;
+    /* ❌ Empêche le bouton de grandir */
+}
+
+/* 📌 Bouton "Insérer" aligné à droite */
+#insertGeneratedWord {
+    flex-grow: 0;
+    /* ❌ Garde la taille normale du bouton */
+    display: flex;
+    justify-content: flex-end;
+    min-width: 100px;
+    /* ✅ Ajuste la taille du bouton */
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Boutons Anagramme et Aléatoire */
+.button-box {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+    margin-bottom: 10px;
+    max-width: 560px;
+}
+
+.button-box button {
+    padding: 4px 10px;
+    font-size: 14px;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 300;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.button-box button:hover {
+    background-color: #0056b3;
+}
+
+
+
+/* Bouton Définir les caractères spéciaux */
+.insert-config-container {
+    text-align: center;
+    margin-bottom: 10px;
+    max-width: 560px;
+}
+
+.insert-config-container button {
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #17a2b8;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.insert-config-container button:hover {
+    background-color: #138496;
+}
+
+/* Bouton Insérer (masqué) */
+#insertWordBox {
+    display: none;
+    padding: 4px 10px;
+    font-size: 14px;
+    border: 1px solid #E0E0E0;
+    border-radius: 12px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+}
+
+#insertWordBox:hover {
+    background-color: #0056b3;
+}
+
+
+
+
+
+
+body.dark-theme .modal-content {
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+    box-shadow: 0 0 25px rgba(0, 0, 0, 0.8);
+}
+
+body.dark-theme .modal-header {
+    background-color: #3c3c3c;
+    border-bottom: 1px solid #555;
+}
+
+body.dark-theme .modal-header h2 {
+    color: #ffffff;
+}
+
+body.dark-theme .modal-text {
+    color: #e0e0e0;
+}
+
+body.dark-theme .modal-text h2,
+body.dark-theme .modal-text h3 {
+    color: #ffffff;
+}
+
+body.dark-theme .modal-text p {
+    color: #d0d0d0;
+}
+
+body.dark-theme .modal-text li {
+    color: #cccccc;
+}
+
+body.dark-theme .modal .close {
+    color: #ccc;
+}
+
+body.dark-theme .modal .close:hover {
+    color: #fff;
+}
+
+body.dark-theme .resize-handle {
+    background: #444;
+}
+
+
+
+
+
+
+
+/* Thème sombre */
+body.dark-theme {
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+}
+
+/* Barre supérieure */
+body.dark-theme .top-bar {
+    background-color: #3a3a3a;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+/* Contenu principal */
+body.dark-theme .app-container {
+    background-color: #2a2a2a;
+}
+
+/* En-tête */
+body.dark-theme .header {
+    background: #3a3a3a;
+    border-bottom: 1px solid #555;
+}
+
+body.dark-theme .header h1 {
+    color: #e0e0e0;
+}
+
+/* Bouton du menu */
+body.dark-theme .menu-button {
+    color: #e0e0e0;
+    transition: all 0.5s ease;
+    background-color: transparent;
+}
+
+body.dark-theme .menu-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+
+
+body.dark-theme .side-menu.open .menu-button {
+    width: 240px;
+    justify-content: flex-start;
+    padding-left: 15px;
+    background-color: rgb(100, 100, 100);
+    /* Ton gris personnalisé */
+    border-radius: 5px 0 0 5px;
+    top: 10px;
+    height: 40px;
+    color: #e0e0e0;
+    transition: all 0.5s ease;
+}
+
+@media (max-width: 480px) {
+
+    /* Ajuste uniquement #menuToggle en mode ouvert dans le thème sombre */
+    body.dark-theme .side-menu.open .menu-button {
+        width: 130px;
+        /* Réduit pour éviter le dépassement */
+        max-width: 100%;
+        /* Ne dépasse pas l’écran */
+        box-sizing: border-box;
+        padding-left: 15px;
+        background-color: rgb(100, 100, 100);
+        border-radius: 5px 0 0 5px;
+        top: 10px;
+        height: 40px;
+        color: #e0e0e0;
+        transition: width 0.4s ease-in-out;
+        /* Transition fluide pour la largeur */
+    }
+
+    /* Ajuste le texte "Options" */
+    body.dark-theme .side-menu.open .menu-button::after {
+        content: " Options";
+
+        font-size: 12px;
+        padding-left: 27px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+body.dark-theme .side-menu.open .menu-button::after {
+    content: " Options";
+    font-weight: bold;
+    font-size: 18px;
+    padding-left: 27px;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+    background-color: transparent;
+    color: #e0e0e0;
+}
+
+body.dark-theme .menu-content {
+    background-color: #3a3a3a;
+    border-top: none;
+    padding-top: 5px;
+    margin-top: 50px;
+    color: #e0e0e0;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+
+
+/* Menu latéral */
+body.dark-theme .side-menu {
+    background-color: #3a3a3a;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.4);
+    transition: left 0.4s ease-in-out;
+}
+
+body.dark-theme .menu-header,
+body.dark-theme .menu-title {
+    background-color: #4a4a4a;
+
+    color: #e0e0e0;
+}
+
+body.dark-theme .standalone-button {
+    background-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .standalone-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-theme #reinitialiser:hover {
+    background-color: #dc3545;
+    color: #fff;
+}
+
+body.dark-theme .submenu {
+    background-color: #3a3a3a;
+    /* Fond uniforme, pas de survol */
+}
+
+/* Assurer que les liens et éléments cliquables restent lisibles */
+body.dark-theme #passwordTips a,
+body.dark-theme #toggleTheme,
+body.dark-theme #toggleFontSettings,
+body.dark-theme #about {
+    color: #e0e0e0;
+    text-decoration: none;
+}
+
+/* Survol uniquement sur les boutons spécifiques dans .submenu */
+body.dark-theme .submenu .menu-item:hover,
+body.dark-theme #passwordTips a:hover,
+body.dark-theme #toggleTheme:hover,
+body.dark-theme #toggleFontSettings:hover,
+body.dark-theme #about:hover {
+    background: #555;
+    /* Effet de survol uniquement sur les boutons */
+}
+
+/* Étiquettes de mode */
+body.dark-theme .mode-label {
+    color: #ccc;
+}
+
+body.dark-theme .mode-label.active {
+    color: #fff;
+}
+
+/* Écran de mot de passe */
+body.dark-theme .password-screen,
+body.dark-theme .password-background {
+    background-color: #3a3a3a;
+    border-color: #555;
+}
+
+body.dark-theme .password-display,
+body.dark-theme #randomScreen,
+body.dark-theme #creativeScreen {
+    color: #e0e0e0;
+}
+
+body.dark-theme .creative-screen:empty::before {
+    color: #888;
+}
+
+/* Boutons superposés */
+body.dark-theme .generate-overlay,
+body.dark-theme .copy-overlay,
+body.dark-theme .memory-overlay,
+body.dark-theme .anagram-overlay,
+body.dark-theme .nav-overlay {
+    color: #e0e0e0;
+
+}
+
+body.dark-theme .anagram-overlay {
+    background-color: #666;
+    /* Fond sombre de base pour lisibilité */
+}
+
+/* Fond sombre spécifique pour .memory-overlay */
+body.dark-theme .memory-overlay {
+    background-color: #666;
+    /* Fond sombre pour lisibilité */
+}
+
+/* Typo claire forcée pour .copy-overlay */
+body.dark-theme .copy-overlay {
+    background-color: transparent;
+    /* Confirme l’absence de fond */
+    color: #e0e0e0 !important;
+    /* Typo claire, surcharge tout */
+}
+
+
+
+body.dark-theme .memory-overlay:hover,
+body.dark-theme .anagram-overlay:hover {
+    color: #fff;
+    background: #555;
+}
+
+/* Survol spécifique pour #copyButton en thème sombre */
+body.dark-theme .copy-overlay:hover {
+
+    color: #9b9b9b;
+    /* Typo blanche pour contraste */
+}
+
+body.dark-theme .nav-overlay:hover {
+    filter: grayscale(100%) contrast(50%) brightness(100%);
+}
+
+body.dark-theme .copy-overlay.copied {
+    color: #2ecc71 !important;
+}
+
+/* Barre de force */
+body.dark-theme .strength-meter {
+    background-color: #555;
+}
+
+body.dark-theme .strength-bar {
+    background-color: #4a90e2;
+}
+
+body.dark-theme #strength-text,
+body.dark-theme #random-strength-text {
+    color: #ccc;
+}
+
+/* Boutons sous les écrans */
+body.dark-theme .below-screen-button {
+    color: #e0e0e0;
+    border-color: #666;
+}
+
+body.dark-theme .below-screen-button.reset-style,
+body.dark-theme .below-screen-button.importer-style,
+body.dark-theme .below-screen-button.secure-style {
+    background: #1e88e5;
+}
+
+body.dark-theme #resetButton:hover {
+    background-color: #c82333;
+}
+
+body.dark-theme .below-screen-button.importer-style:hover {
+    background: #39aebe;
+}
+
+body.dark-theme .below-screen-button.secure-style:hover {
+    background: #4ce26d;
+}
+
+body.dark-theme .below-screen-button#allCopyButton {
+    background: #004085;
+}
+
+body.dark-theme .below-screen-button#allCopyButton:hover {
+    background: #002752;
+}
+
+body.dark-theme .below-screen-button.export-style {
+    background: #28a745;
+}
+
+body.dark-theme .below-screen-button.export-style:hover {
+    background: #196b2c;
+}
+
+/* Curseurs et options */
+body.dark-theme .length-slider-container input[type="range"],
+body.dark-theme .slider-group input[type="range"],
+body.dark-theme #fontSizeSlider {
+    background: #555;
+}
+
+body.dark-theme .length-slider-container input[type="range"]::-webkit-slider-thumb,
+body.dark-theme .slider-group input[type="range"]::-webkit-slider-thumb,
+body.dark-theme #fontSizeSlider::-webkit-slider-thumb {
+    background: #1e88e5;
+}
+
+body.dark-theme .length-slider-container input[type="range"]::-moz-range-thumb,
+body.dark-theme .slider-group input[type="range"]::-moz-range-thumb,
+body.dark-theme #fontSizeSlider::-moz-range-thumb {
+    background: #1e88e5;
+}
+
+body.dark-theme .length-slider-container label,
+body.dark-theme .slider-group label,
+body.dark-theme .slider-group span,
+body.dark-theme #length-value,
+body.dark-theme .creative-length-display,
+body.dark-theme #creative-length-value {
+    color: #ccc;
+}
+
+/* Cases à cocher */
+body.dark-theme .checkbox-group label,
+body.dark-theme .special-char-config label,
+body.dark-theme .random-char-options label,
+body.dark-theme .separator-options label,
+body.dark-theme .special-chars-list label {
+    color: #ccc;
+}
+
+body.dark-theme .checkbox-group input[type="checkbox"],
+body.dark-theme .random-char-options input[type="checkbox"],
+body.dark-theme .separator-options input[type="checkbox"],
+body.dark-theme .special-chars-list input[type="checkbox"] {
+    background-color: #4a4a4a;
+    border-color: #888;
+}
+
+body.dark-theme .checkbox-group input[type="checkbox"]:checked,
+body.dark-theme .random-char-options input[type="checkbox"]:checked,
+body.dark-theme .separator-options input[type="checkbox"]:checked,
+body.dark-theme .special-chars-list input[type="checkbox"]:checked {
+    border-color: #1e88e5;
+}
+
+body.dark-theme .checkbox-group input[type="checkbox"]:checked::after,
+body.dark-theme .random-char-options input[type="checkbox"]:checked::after,
+body.dark-theme .separator-options input[type="checkbox"]:checked::after,
+body.dark-theme .special-chars-list input[type="checkbox"]:checked::after {
+    color: #1e88e5;
+}
+
+/* Boutons divers */
+body.dark-theme .modern-button,
+body.dark-theme .button-group button,
+body.dark-theme .insert-button,
+body.dark-theme #insertButtonsGroup button,
+body.dark-theme .word-options button,
+body.dark-theme #insertGeneratedWord,
+body.dark-theme .button-box button,
+body.dark-theme #insertLeftButton,
+body.dark-theme #insertRightButton,
+body.dark-theme #insertMiddleButton,
+body.dark-theme #insertBothButton,
+body.dark-theme #insertWordBox,
+body.dark-theme #insertGeneratorBox,
+body.dark-theme #insertPhraseBox {
+    background-color: #1e88e5;
+    color: #fff;
+}
+
+body.dark-theme .modern-button:hover,
+body.dark-theme .button-group button:hover,
+body.dark-theme .insert-button:hover,
+body.dark-theme #insertButtonsGroup button:hover,
+body.dark-theme .word-options button:hover,
+body.dark-theme #insertGeneratedWord:hover,
+body.dark-theme .button-box button:hover,
+body.dark-theme #insertLeftButton:hover,
+body.dark-theme #insertRightButton:hover,
+body.dark-theme #insertMiddleButton:hover,
+body.dark-theme #insertBothButton:hover,
+body.dark-theme #insertWordBox:hover,
+body.dark-theme #insertGeneratorBox:hover,
+body.dark-theme #insertPhraseBox:hover {
+    background-color: #1565c0;
+}
+
+body.dark-theme #addSeparatorButton {
+    background-color: #17a2b8;
+}
+
+body.dark-theme #addSeparatorButton:hover {
+    background-color: #138496;
+}
+
+/* Fenêtres modales */
+body.dark-theme #specialCharsWindowRandom,
+body.dark-theme #specialCharsWindow,
+body.dark-theme #separatorModal,
+body.dark-theme #exportPage,
+body.dark-theme .special-chars-container,
+body.dark-theme #fontSettingsWindow {
+    background: #3a3a3a;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme #separatorModal h3,
+body.dark-theme .special-chars-header h2,
+body.dark-theme #fontSettingsWindow h3,
+body.dark-theme #exportPage h2 {
+    color: #fff;
+}
+
+body.dark-theme #validateSeparator {
+    background-color: #1e88e5 !important;
+}
+
+body.dark-theme #validateSeparator:hover {
+    background-color: #1565c0 !important;
+}
+
+body.dark-theme .memory-display,
+body.dark-theme #comments {
+    background: #4a4a4a;
+    border-color: #666;
+    color: #e0e0e0;
+}
+
+body.dark-theme .back-button {
+    background: #555;
+    color: #e0e0e0;
+}
+
+body.dark-theme .back-button:hover {
+    background-color: #1e88e5;
+    color: #fff;
+}
+
+body.dark-theme .save-button {
+    background: #28a745;
+}
+
+body.dark-theme .save-button:hover {
+    background: #218838;
+}
+
+/* Écrans spécifiques */
+body.dark-theme #generatedWordDisplay,
+body.dark-theme #wordList,
+body.dark-theme #generatedPhrase,
+body.dark-theme #selectedWordDisplay {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+/* Inputs et selects */
+body.dark-theme input[type="text"],
+body.dark-theme input[type="number"],
+body.dark-theme select {
+    background-color: #4a4a4a;
+    color: #e0e0e0;
+    border-color: #666;
+}
+
+/* Notifications */
+body.dark-theme .copy-notification {
+    background-color: #2ecc71;
+    color: #fff;
+}
+
+/* Transitions pour une bascule fluide */
+body,
+.top-bar,
+.header,
+.menu-header,
+.menu-title,
+.standalone-button,
+.menu-item,
+.submenu,
+.password-screen,
+.password-background,
+.password-display,
+.generate-overlay,
+.copy-overlay,
+.memory-overlay,
+.anagram-overlay,
+.nav-overlay,
+.strength-meter,
+.below-screen-button,
+.length-slider-container input[type="range"],
+.slider-group input[type="range"],
+.checkbox-group label,
+.special-chars-window,
+#separatorModal,
+#exportPage,
+.memory-display,
+#comments,
+.font-settings-window,
+#randomScreen,
+#creativeScreen,
+#generatedWordDisplay,
+#wordList,
+#generatedPhrase,
+#selectedWordDisplay,
+input[type="text"],
+input[type="number"],
+select {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Exceptions pour transitions spécifiques */
+body.dark-theme .side-menu {
+    transition: left 0.4s ease-in-out;
+}
+
+body.dark-theme .menu-button {
+    color: #e0e0e0;
+    transition: all 0.5s ease;
+    background-color: transparent;
+}
+
+
+
+
+
+/* Dans ton style.css, dans la section body.dark-theme, ajoute ou remplace ces styles */
+
+/* Options du mode aléatoire */
+body.dark-theme .options-container.random-options,
+body.dark-theme #randomOptions {
+    background: #3a3a3a;
+    /* Fond sombre cohérent */
+    border-color: #555;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    /* Ombre légèrement plus sombre */
+}
+
+/* Curseurs dans random-options */
+body.dark-theme .slider-group {
+    background: transparent;
+    /* Pas de fond parasite */
+}
+
+body.dark-theme .slider-group label {
+    color: #e0e0e0;
+    /* Texte clair pour lisibilité */
+}
+
+body.dark-theme .slider-group input[type="range"] {
+    background: #555;
+    /* Fond des curseurs */
+}
+
+body.dark-theme .slider-group input[type="range"]::-webkit-slider-thumb {
+    background: #1e88e5;
+    /* Thumb bleu pour contraste */
+}
+
+body.dark-theme .slider-group input[type="range"]::-moz-range-thumb {
+    background: #1e88e5;
+}
+
+body.dark-theme .slider-group input[type="range"]::-webkit-slider-runnable-track {
+    background: linear-gradient(to right, #1e88e5 0%, #1e88e5 var(--range-progress), #555 var(--range-progress), #555 100%);
+}
+
+body.dark-theme .slider-group input[type="range"]::-moz-range-progress {
+    background: #1e88e5;
+}
+
+body.dark-theme .slider-group span {
+    color: #ccc;
+    /* Pourcentages lisibles */
+}
+
+
+
+/* Dans ton style.css, dans la section body.dark-theme, ajoute ou remplace ces styles */
+
+/* Boîte à mots (mode créatif) */
+body.dark-theme .box-container,
+body.dark-theme #wordBox {
+    background: #3a3a3a;
+    /* Fond sombre cohérent */
+    border-color: #555;
+    /* Bordure assortie */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    /* Ombre sombre */
+}
+
+body.dark-theme #languageSelect {
+
+    border: 1px solid #E0E0E0;
+
+    background-color: #6b6b6b;
+
+    transition: border-color 0.3s ease;
+
+}
+
+body.dark-theme #languageSelect:hover {
+    border-color: #999;
+}
+
+body.dark-theme #languageSelect:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
+}
+
+
+/* Écran d’affichage généré dans la boîte à mots */
+body.dark-theme #generatedWordDisplay {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border-color: #555;
+}
+
+/* Options de contrôle (checkboxes) */
+body.dark-theme .checkbox-group {
+    background: transparent;
+    /* Pas de fond parasite */
+}
+
+body.dark-theme .checkbox-group label {
+    color: #e0e0e0;
+    /* Texte clair pour lisibilité */
+}
+
+body.dark-theme .checkbox-group input[type="checkbox"] {
+    background-color: #4a4a4a;
+    border-color: #888;
+}
+
+body.dark-theme .checkbox-group input[type="checkbox"]:checked {
+    border-color: #1e88e5;
+}
+
+body.dark-theme .checkbox-group input[type="checkbox"]:checked::after {
+    color: #1e88e5;
+    /* Coche bleue pour contraste */
+}
+
+/* Conteneur commun (englobe la Boîte à mots et autres) */
+body.dark-theme .common-container {
+    background: #3a3a3a;
+    border-color: #555;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+
+
+
+/* Dans ton style.css, dans la section body.dark-theme, ajoute ces styles */
+
+/* Labels dans le générateur de mots et de phrases */
+body.dark-theme #generatorBox .option-group label,
+body.dark-theme #phraseBox .option-group label {
+    color: #e0e0e0;
+    /* Typo claire pour lisibilité */
+}
+
+/* Placeholders dans les inputs */
+body.dark-theme #generatorBox .option-group input::placeholder,
+body.dark-theme #phraseBox .option-group input::placeholder {
+    color: #ccc;
+    /* Gris clair pour les placeholders */
+    opacity: 1;
+    /* Assure la visibilité complète (spécifique à certains navigateurs) */
+}
+
+
+
+
+/* Fond du sélecteur à bords arrondis */
+body.dark-theme #boxType {
+    background-color: #d0d0d0;
+    color: #007bff;
+    border-color: #b0b0b0;
+}
+
+body.dark-theme #boxType option {
+    background-color: #d0d0d0;
+    color: #007bff;
+}
+
+/* Label contenant #toggleAllSpecialCharsCreative */
+body.dark-theme #specialCharsWindow label:has(#toggleAllSpecialCharsCreative) {
+    color: #e0e0e0;
+    /* Typo claire pour lisibilité */
+}
+
+/* Labels des caractères dans .char-options */
+body.dark-theme #specialCharsWindow .char-options label {
+    color: #e0e0e0;
+}
+
+/* Checkboxes dans #specialCharsWindow */
+body.dark-theme #specialCharsWindow .char-options input[type="checkbox"] {
+    border-color: #888;
+}
+
+body.dark-theme #specialCharsWindow .char-options input[type="checkbox"]:checked::after {
+    color: #1e88e5;
+}
+
+/* ... (reste des styles inchangés) ... */

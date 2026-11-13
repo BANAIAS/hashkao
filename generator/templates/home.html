@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Accueil</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <nav>
+      <a href="/">Accueil</a>
+      <a href="/generate">Générateur</a>
+    </nav>
+
+    <h1>Bienvenue sur mon générateur de mots de passe</h1>
+    <p>
+      Utilisez ce site pour générer des mots de passe sécurisés en quelques
+      clics.
+    </p>
+  </body>
+</html>

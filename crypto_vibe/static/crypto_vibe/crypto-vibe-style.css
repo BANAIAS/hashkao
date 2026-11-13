@@ -1,0 +1,2028 @@
+/* =============================================================
+   Crypto‑Vibe — feuille de style principale
+   PASS 1 : Nettoyage léger + commentaires ligne par ligne
+   -------------------------------------------------------------
+   Principes :
+   - Conserver le rendu actuel, clarifier les intentions.
+   - Ajouter des variables CSS de base (couleurs/espacements).
+   - Commenter chaque règle et, autant que possible, chaque propriété.
+   - Laisser des TODO pour d'éventuelles optimisations futures.
+   ============================================================= */
+
+/* -----------------------------
+   Variables de thème (basique)
+   ----------------------------- */
+:root {
+    --bg-app: #e8ecef;
+    /* fond global de l'appli */
+    --text: #222;
+    /* texte principal */
+    --muted: #666;
+    /* texte atténué */
+    --primary: #007bff;
+    /* bleu principal (sélection, actions) */
+    --primary-700: #0056b3;
+    /* bleu foncé (hover) */
+    --accent: #2980b9;
+    /* accent (prix/chart) */
+    --card: #ffffff;
+    /* fond des cartes */
+    --card-muted: #f3f4f6;
+    /* gris clair (chips) */
+    --border: #e5e7eb;
+    /* bordures neutres */
+    --shadow: rgba(0, 0, 0, 0.06);
+    /* ombre légère */
+    --shadow-strong: rgba(0, 0, 0, 0.15);
+    /* ombre plus forte */
+    /* === nouveaux tokens communs aux cartes + chart === */
+    --cards-max: 990px;
+    /* largeur max du rail/cartes */
+    --cards-pad: 8px;
+    /* padding horizontal du rail */
+    --chart-trim: 24px;
+    /* → paramètre réglable : rétrécit la largeur de la courbe (ex: 16px, 24px, 40px) */
+}
+
+/* =============================
+   Reset minimal + base typo
+   ============================= */
+/* Réinitialise marges/paddings et définit la police par défaut */
+body,
+h1,
+h2,
+p,
+span,
+button {
+    /* éléments courants du layout */
+    margin: 0;
+    /* supprime marge par défaut */
+    padding: 0;
+    /* supprime padding par défaut */
+    box-sizing: border-box;
+    /* inclut bordures dans le calcul width/height */
+    font-family: 'Segoe UI', Roboto, sans-serif;
+    /* pile de polices lisible */
+}
+
+/* Corps de page pour le dashboard */
+body.dashboard-body {
+    background-color: var(--bg-app);
+    /* couleur de fond globale */
+    color: var(--text);
+    /* couleur de texte principale */
+    padding: 15px;
+    /* respiration générale autour du contenu */
+    min-height: 100vh;
+    /* couvre toute la hauteur du viewport */
+}
+
+/* =============================
+   Header (fixe en haut)
+   ============================= */
+.dashboard-header {
+    display: flex;
+    /* layout en ligne : logo + abo */
+    justify-content: space-between;
+    /* espace entre logo et abonnement */
+    align-items: center;
+    /* alignement vertical centré */
+    margin-bottom: 20px;
+    /* espace sous le header (utile si non fixé) */
+    padding: 10px;
+    /* respiration interne */
+    border-radius: 8px;
+    /* coins arrondis */
+    box-shadow: 0 2px 6px var(--shadow);
+    /* ombre discrète */
+    position: fixed;
+    /* reste visible en haut */
+    top: 0;
+    left: 0;
+    right: 0;
+    /* colle aux bords supérieurs */
+    z-index: 1000;
+    /* au-dessus du contenu */
+    background: rgba(255, 255, 255, .85);
+    /* fond semi-opaque (améliore la lisibilité) */
+    backdrop-filter: blur(6px);
+    /* flou derrière le header (supporté moderne) */
+}
+
+.logo {
+    width: 100px;
+    /* largeur fixe du logo */
+    height: 100px;
+    /* hauteur fixe du logo */
+    margin-left: 10px;
+    /* espace gauche */
+    object-fit: contain;
+    /* garde le ratio sans recadrer */
+}
+
+.subscription {
+    display: flex;
+    /* groupe les actions d'abonnement */
+    gap: 10px;
+    /* espace entre boutons */
+    margin-right: 10px;
+    /* espace à droite */
+}
+
+/* =============================
+   Liste horizontale de cartes
+   ============================= */
+/* =============================
+   Liste horizontale de cartes
+   ============================= */
+.horizontal-scroll-container {
+    display: flex;
+    /* aligne les cartes côte à côte */
+    flex-direction: row;
+    /* direction horizontale */
+    flex-wrap: nowrap;
+    /* une seule ligne, pas de retour */
+    overflow-x: auto;
+    /* scroll horizontal activé */
+    overflow-y: hidden;
+    /* pas de scroll vertical ici */
+    scroll-behavior: smooth;
+    /* défilement animé (hors .dragging) */
+    scroll-snap-type: x mandatory;
+    /* snap des cartes au scroll */
+    padding: var(--cards-pad);
+    /* respiration autour des cartes */
+    gap: 12px;
+    /* espace constant entre cartes */
+    white-space: nowrap;
+    /* évite les retours involontaires */
+    max-width: var(--cards-max);
+    /* largeur max du rail (token commun) */
+    width: 100%;
+    /* s'adapte au conteneur */
+    margin: 120px auto 20px auto;
+    /* centrage + espace pour le header fixé */
+    position: relative;
+    /* contexte pour éléments absolus */
+    overscroll-behavior-x: contain;
+    /* évite le scroll de la page quand on arrive aux bords */
+    -webkit-overflow-scrolling: touch;
+    /* inertie iOS */
+    touch-action: pan-x;
+    /* optimise les gestes horizontaux */
+}
+
+/* Pendant un drag (JS ajoute .dragging) : on désactive l'inertie lissée */
+.horizontal-scroll-container.dragging {
+    scroll-behavior: auto;
+    /* pas d'animation de scroll */
+    cursor: grabbing;
+    /* retour visuel de "prise" */
+    user-select: none;
+    /* évite la sélection de texte */
+}
+
+.horizontal-scroll-container.dragging .crypto-card {
+    pointer-events: none;
+}
+
+/* =============================
+   Carte crypto (états base/hover/selected)
+   ============================= */
+.crypto-card {
+    scroll-snap-align: start;
+    /* s'aligne au bord quand on s'arrête */
+    background-color: var(--card);
+    /* fond de la carte */
+    border-radius: 10px;
+    /* coins arrondis */
+    box-shadow: 0 3px 8px var(--shadow);
+    /* ombre douce */
+    padding: 12px;
+    /* respiration interne */
+    min-height: 160px;
+    /* hauteur mini pour contenu */
+    flex: 0 0 300px;
+    /* largeur fixe, pas de croissance */
+    cursor: pointer;
+    /* suggère l'interaction */
+    position: relative;
+    /* contexte pour éléments absolus */
+    will-change: transform, opacity, filter, box-shadow;
+    /* perf */
+    transition:
+        /* transitions douces des états */
+        transform 160ms ease,
+        opacity 160ms ease,
+        filter 160ms ease,
+        box-shadow 160ms ease,
+        border 160ms ease;
+}
+
+/* État non sélectionné : atténué/miniaturé */
+.crypto-card:not(.selected):not(.is-selected) {
+    opacity: 0.5;
+    /* plus pâle */
+    filter: grayscale(70%);
+    /* désaturé */
+    transform: scale(0.95);
+    /* légèrement réduit */
+}
+
+/* État sélectionné : mis en avant */
+.crypto-card.selected,
+.crypto-card.is-selected {
+    opacity: 1;
+    /* pleine opacité */
+    border: 2px solid var(--primary);
+    /* liseré bleu */
+    background-color: #e9f5ff;
+    /* fond bleuté léger */
+    transform: scale(1.05);
+    /* léger zoom */
+    box-shadow: 0 5px 10px var(--shadow-strong);
+    /* ombre renforcée */
+}
+
+/* Hovers (desktop only) */
+@media (hover: hover) and (pointer: fine) {
+    .crypto-card:not(.selected):not(.is-selected):hover {
+        opacity: 0.82;
+        /* un peu plus visible */
+        filter: grayscale(25%);
+        /* redonne un peu de couleur */
+        transform: scale(1.015);
+        /* zoom subtil */
+        box-shadow: 0 10px 22px rgba(0, 0, 0, .08);
+        /* ombre plus large */
+        background: #fff;
+        /* garde un fond neutre */
+    }
+
+    .crypto-card:not(.selected):not(.is-selected):active {
+        transform: scale(1.01);
+    }
+
+    .crypto-card.selected:hover,
+    .crypto-card.is-selected:hover {
+        transform: scale(1.03);
+        /* hover doux même sélectionnée */
+        box-shadow: 0 10px 22px rgba(0, 0, 0, .10);
+    }
+}
+
+/* Accessibilité au clavier */
+.crypto-card:focus-visible {
+    outline: 3px solid rgba(0, 123, 255, 0.7);
+    /* halo accessible */
+    outline-offset: 2px;
+    /* espace entre halo et carte */
+}
+
+/* Scrollbars WebKit (esthétique) */
+.horizontal-scroll-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.horizontal-scroll-container::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, .2);
+    /* pouce discret */
+    border-radius: 4px;
+    /* coins arrondis */
+}
+
+/* =============================
+   Haut de carte : logo + nom + prix
+   ============================= */
+.card-top {
+    display: flex;
+    /* aligne logo/nom/prix */
+    align-items: center;
+    /* centrage vertical */
+    margin-bottom: 8px;
+    /* espace sous l'entête */
+    justify-content: space-between;
+    /* pousse le prix à droite */
+}
+
+.crypto-logo {
+    width: 24px;
+    height: 24px;
+    /* icône carrée */
+    margin-right: 6px;
+    /* espace à droite du logo */
+}
+
+.crypto-name {
+    font-size: 1.1em;
+    /* taille légèrement augmentée */
+    font-weight: 500;
+    /* semi-bold */
+    color: #444;
+    /* texte foncé doux */
+    flex-grow: 1;
+    /* occupe l'espace dispo au centre */
+}
+
+.crypto-price {
+    font-size: 1.05em;
+    /* quasi taille du titre */
+    font-weight: bold;
+    /* met le prix en valeur */
+    color: var(--accent);
+    /* bleu accentué */
+}
+
+/* =============================
+   Rotateur de "vibes" (Reddit/News…)
+   ============================= */
+.vibe-rotator {
+    position: relative;
+    /* pour boutons/éléments absolus si besoin */
+    margin-bottom: 8px;
+    /* espace sous la ligne */
+    display: flex;
+    /* conteneur horizontal */
+    align-items: center;
+    /* alignement vertical */
+}
+
+.vibe-item {
+    display: flex;
+    /* aligne label + valeurs */
+    align-items: center;
+    /* centrage vertical */
+    gap: 5px;
+    /* petit espacement */
+    font-size: 0.9em;
+    /* typo un peu plus compacte */
+    flex-wrap: wrap;
+    /* autorise retour à la ligne pour les chips */
+}
+
+.vibe-label {
+    font-weight: 500;
+    color: #555;
+}
+
+/* label Reddit/News */
+
+/* Bouton (si utilisé) pour switcher la vibe */
+.vibe-next-btn {
+    position: absolute;
+    /* positionné à droite de la zone */
+    right: 0;
+    top: 50%;
+    /* coin supérieur droit centré verticalement */
+    transform: translateY(-50%);
+    /* centre exactement verticalement */
+    background: transparent;
+    /* pas de fond */
+    border: none;
+    /* pas de bordure */
+    color: var(--primary);
+    /* bleu action */
+    font-size: 15px;
+    /* taille lisible */
+    cursor: pointer;
+    /* pointeur main */
+    padding: 0 2px;
+    /* clic confortable sans déborder */
+}
+
+.vibe-next-btn:hover {
+    color: var(--primary-700);
+}
+
+/* =============================
+   Bloc sentiment (valeur/score/flèche)
+   ============================= */
+.sentiment {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.sentiment-value {
+    font-weight: bold;
+    /* met en avant la polarité */
+    font-size: 0.9em;
+    /* taille compacte */
+    background-color: #eafaf1;
+    /* vert très clair par défaut (positif) */
+    padding: 2px 6px;
+    /* puce compacte */
+    border-radius: 10px;
+    /* pilule arrondie */
+    display: inline-block;
+    /* dimensionne sur le contenu */
+    transition: background-color 0.2s ease;
+    /* transition douce quand la couleur change */
+}
+
+.sentiment-value.neutre {
+    background-color: #f5f5f5;
+    color: #666;
+}
+
+.sentiment-value.negatif {
+    background-color: #fdecea;
+    color: #c0392b;
+}
+
+.sentiment-score {
+    font-size: 0.85em;
+    color: #666;
+}
+
+/* score numérique */
+
+/* Flèche de tendance montée/descente */
+.arrow-icon {
+    transition: transform 0.2s ease;
+}
+
+.arrow-icon.up::after {
+    content: "🔺";
+    color: #27ae60;
+    font-size: 1.2em;
+    vertical-align: middle;
+}
+
+.arrow-icon.down::after {
+    content: "🔻";
+    color: #e74c3c;
+    font-size: 1.2em;
+    vertical-align: middle;
+}
+
+/* Anciennes infos (prediction/confidence) — conservées si réutilisées */
+.prediction {
+    font-size: 0.9em;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.confidence {
+    font-size: 0.85em;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+/* =============================
+   Bouton loupe (si utilisé)
+   ============================= */
+.details-btn.small {
+    position: absolute;
+    /* ancré en bas/droite de la carte */
+    bottom: 6px;
+    right: 6px;
+    /* coin inférieur droit */
+    background: transparent;
+    /* bouton "fantôme" */
+    border: none;
+    /* pas de bordure */
+    color: var(--primary);
+    /* bleu action */
+    font-size: 16px;
+    /* taille d'icône */
+    cursor: pointer;
+    /* pointeur main */
+    padding: 2px;
+    /* zone de clic compacte */
+}
+
+.details-btn.small:hover {
+    color: var(--primary-700);
+}
+
+/* =============================
+   Zone graphique (Chart.js)
+   ============================= */
+/* =============================
+   Zone graphique (Chart.js)
+   ============================= */
+.chart-container {
+    background: #fff;
+    /* fond blanc pour la lisibilité */
+    padding: 15px;
+    /* respiration interne */
+    border-radius: 10px;
+    /* carte */
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.05);
+    /* ombre légère */
+    /* !! Alignement précis sur la largeur des 3 cases + marge réglable !! */
+    max-width: calc(var(--cards-max) - (var(--cards-pad) * 2) - var(--chart-trim, 0px));
+    width: 100%;
+    /* prend toute la largeur dispo dans ce plafond */
+    margin: 0 auto 15px auto;
+    /* centré par défaut */
+    text-align: center;
+    /* centre le texte de chargement */
+    position: relative;
+    /* pour la superposition du loader */
+}
+
+/* Utilitaires d'alignement de la courbe (optionnels) */
+.chart-container.chart--left {
+    margin-left: 0;
+    margin-right: auto;
+}
+
+.chart-container.chart--right {
+    margin-left: auto;
+    margin-right: 0;
+}
+
+.chart-container.chart--center {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.chart-loading {
+    position: absolute;
+    /* se place au dessus du canvas */
+    top: 50%;
+    left: 50%;
+    /* centre approximatif */
+    transform: translate(-50%, -50%);
+    /* centrage exact */
+    font-size: 1em;
+    color: #666;
+    /* style du texte */
+    opacity: 1;
+    /* visible par défaut */
+    transition: opacity 0.3s ease;
+    /* fondu lors de l'affichage de la courbe */
+}
+
+.chart-loading.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* caché quand la courbe est prête */
+
+canvas {
+    border: 1px solid #ddd;
+    /* liseré discret autour du graphique */
+    border-radius: 4px;
+    /* coins arrondis */
+    max-width: 100%;
+    height: auto;
+    /* responsive */
+    opacity: 0;
+    /* invisible avant init */
+    transition: opacity 0.3s ease;
+    /* fondu à l'affichage */
+}
+
+canvas.visible {
+    opacity: 1;
+}
+
+/* Hauteur préférée du chart (augmente la surface visible) */
+#price-chart {
+    height: 360px;
+}
+
+/* =============================
+   Wrapper du rail + flèches
+   ============================= */
+/* =============================
+   Wrapper du rail + flèches
+   ============================= */
+.scroll-shell {
+    position: relative;
+    /* contexte pour les flèches absolues */
+    max-width: var(--cards-max);
+    /* aligné sur la même largeur que les cartes */
+    width: 100%;
+    /* largeur contrainte + fluide */
+    margin: 120px auto 20px auto;
+    /* espace pour le header fixe + marge bas */
+}
+
+/* Boutons de scroll en overlay */
+.scroll-btn {
+    position: absolute;
+    /* flottent sur les cartes */
+    top: 50%;
+    transform: translateY(-50%);
+    /* centrés verticalement */
+    width: 44px;
+    height: 44px;
+    /* taille du bouton */
+    border: 0;
+    border-radius: 999px;
+    /* bouton rond */
+    cursor: pointer;
+    z-index: 10;
+    /* au-dessus du rail */
+    background-color: rgba(0, 0, 0, 0.2);
+    /* pastille translucide */
+    backdrop-filter: blur(6px);
+    /* flou de fond */
+    -webkit-backdrop-filter: blur(6px);
+    background-repeat: no-repeat;
+    /* icône PNG centrée */
+    background-position: center;
+    /* centrage icône */
+    background-size: 20px 20px;
+    /* taille de l'icône */
+    color: transparent;
+    /* pas de texte visible */
+    transition: background-color .2s, transform .15s, opacity .25s;
+    /* feedback */
+}
+
+.scroll-btn.left {
+    left: calc(-1 * clamp(48px, 6vw, 110px));
+}
+
+/* ancrage à gauche, hors flux */
+.scroll-btn.right {
+    right: calc(-1 * clamp(48px, 6vw, 110px));
+}
+
+/* ancrage à droite, hors flux */
+
+/* Icônes (penser à fournir les @1x/@2x dans /static/crypto_vibe/img/ui/) */
+.scroll-btn.left {
+    background-image: image-set(url('/static/crypto_vibe/img/ui/arrow-left.png') 1x,
+            url('/static/crypto_vibe/img/ui/arrow-left@2x.png') 2x);
+}
+
+.scroll-btn.right {
+    background-image: image-set(url('/static/crypto_vibe/img/ui/arrow-right.png') 1x,
+            url('/static/crypto_vibe/img/ui/arrow-right@2x.png') 2x);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .scroll-btn:hover {
+        background-color: rgba(0, 0, 0, 0.3);
+        transform: translateY(-50%) scale(1.04);
+    }
+
+    .scroll-btn:active {
+        transform: translateY(-50%) scale(0.98);
+    }
+}
+
+.scroll-btn.hidden,
+.scroll-btn[disabled] {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* masqué/désactivé */
+
+/* =============================
+   Bandeau Ticker (haut collant)
+   ============================= */
+
+:root {
+    --ticker-h: 42px;
+    /* ↑ monte à 46px/52px si tu veux l'allonger en Y */
+    /* --ticker-offset: 100px;   /* décommente si tu veux forcer l'offset ici */
+}
+
+
+.ticker-wrap {
+    position: sticky;
+    top: var(--ticker-offset, 100px);
+    z-index: 1000;
+    height: var(--ticker-h);
+    overflow: hidden;
+    background: #0b1220;
+    border-top: 1px solid #1f2a44;
+    border-bottom: 1px solid #1f2a44;
+
+    /* FULL-BLEED : prend toute la largeur écran, quels que soient les paddings parents */
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    margin-right: calc(50% - 50vw);
+}
+
+/* Conteneur qui se translate ; vitesse contrôlée par --ticker-duration */
+.ticker-inner {
+    display: inline-flex;
+    /* piste horizontale */
+    align-items: center;
+    /* centrage vertical */
+    white-space: nowrap;
+    /* pas de retour à la ligne */
+    will-change: transform;
+    /* perf sur l'animation */
+    animation: ticker-move var(--ticker-duration, 40s) linear infinite;
+    /* défilement continu */
+}
+
+/* Deux pistes juxtaposées pour la boucle infinie */
+.ticker-track {
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+/* Items individuels du ticker */
+.ticker-item {
+    display: inline-flex;
+    /* aligne icônes/texte */
+    align-items: center;
+    /* centrage vertical */
+    gap: 8px;
+    /* espace interne */
+    padding: 0 16px;
+    /* marges latérales */
+    height: 42px;
+    /* même hauteur que le wrap */
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    /* séparateur discret */
+    font: 500 13px/42px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    /* typo compacte */
+    color: #e6eaf2;
+    /* texte clair sur fond sombre */
+    height: var(--ticker-h);
+    line-height: var(--ticker-h);
+}
+
+.ticker-price {
+    font-weight: 600;
+}
+
+/* met le prix en valeur */
+.ticker-up {
+    color: #22c55e;
+}
+
+/* vert */
+.ticker-down {
+    color: #ef4444;
+}
+
+/* rouge */
+.ticker-flat {
+    color: #9aa3b2;
+}
+
+/* neutre */
+.ticker-arrow {
+    display: inline-block;
+    transform: translateY(1px);
+    font-size: 12px;
+}
+
+/* ajuste le pictogramme */
+
+@keyframes ticker-move {
+
+    /* animation du ruban */
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+
+    /* -50% car 2 pistes identiques */
+}
+
+
+
+/* =============================
+   Footer Tickers (double rangée)
+   ============================= */
+.footer-tickers {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* collé en bas */
+    z-index: 9999;
+    /* au-dessus de tout */
+}
+
+.ticker-row {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    /* structure de base */
+    display: flex;
+    align-items: center;
+    pointer-events: auto;
+    /* interactif */
+}
+
+/* ----- Rangée blanche (haut du footer) — une actu à la fois (VERTICAL) ----- */
+.ticker-row--white {
+    background-color: #fff;
+    color: #000;
+    height: 48px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+}
+
+.ticker-row--white .ticker-content-fixed {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+    white-space: nowrap;
+    font-weight: 600;
+    font-size: 16px;
+    line-height: 48px;
+    /* calage vertical */
+}
+
+/* ===== Items + texte (ONE source of truth) ===== */
+:root {
+    --cta-space: 72px;
+    /* réserve à droite pour le logo/bouton Generator */
+}
+
+.ticker-row--white .ticker-item {
+    position: absolute;
+    left: 16px;
+    top: -15px;
+    /* centrage visuel */
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    /* ne couvre plus toute la barre → seulement le contenu,
+     sans empiéter sur le CTA à droite */
+    width: auto;
+    max-width: calc(100% - 32px - var(--cta-space));
+
+    opacity: 0;
+    transform: translateY(100%);
+    transition: opacity .6s ease, transform .6s ease;
+}
+
+/* Texte tronqué en tenant compte du CTA à droite */
+.ticker-row--white .ticker-text {
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100% - 48px - var(--cta-space));
+    color: #000;
+    font-size: 16px;
+}
+
+/* États d’animation */
+.ticker-row--white .ticker-item--incoming {
+    opacity: 0;
+    transform: translateY(100%);
+}
+
+.ticker-row--white .ticker-item--active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.ticker-row--white .ticker-item--exiting {
+    opacity: 0;
+    transform: translateY(-100%);
+}
+
+/* Curseur : clic seulement sur le lien */
+.ticker-row--white .ticker-content-fixed .ticker-item {
+    cursor: default;
+}
+
+.ticker-row--white .ticker-content-fixed a.ticker-item {
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.ticker-row--white .ticker-content-fixed a.ticker-item:hover .ticker-text,
+.ticker-row--white .ticker-content-fixed a.ticker-item:focus-visible .ticker-text {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* Mobile : réserve CTA réduite (icône seule) */
+@media (max-width:640px) {
+    :root {
+        --cta-space: 44px;
+    }
+}
+
+
+/* Décor commun des éléments */
+.ticker-logo {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+/* logo source */
+.ticker-link {
+    color: #FF4500;
+    text-decoration: none;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+/* lien externe */
+.news-sep {
+    opacity: .35;
+}
+
+/* séparateur atténué */
+
+/* ----- Rangée noire (bas du footer) : wire une actu à la fois (fade + slide) ----- */
+.ticker-row--black {
+    background: #0b0b0b;
+    color: #e6eaf2;
+    /* palette sombre */
+    height: 46px;
+    overflow: hidden;
+    border-top: 1px solid #181818;
+    /* séparateur */
+}
+
+.ticker-row--black .ticker-content {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    /* aligne à gauche */
+    padding-left: 20px;
+    min-height: 46px;
+    /* calage vertical */
+}
+
+:root {
+    --wire-row-h: 46px;
+}
+
+.wire-now {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    /* espace entre badge/source et titre */
+    white-space: nowrap;
+    /* 1 seule ligne en desktop */
+    height: var(--wire-row-h);
+    opacity: 0;
+    /* invisible avant l’animation */
+    will-change: transform, opacity;
+    /* perf anims */
+}
+
+.wire-in {
+    animation: wireIn var(--in-ms, 520ms) ease-out both;
+}
+
+/* apparition */
+.wire-out {
+    animation: wireOut var(--out-ms, 420ms) ease-in forwards;
+}
+
+/* disparition */
+
+@keyframes wireIn {
+
+    /* entrée : fade + petit slide */
+    0% {
+        opacity: 0;
+        transform: translateX(18px);
+    }
+
+    60% {
+        opacity: 1;
+        transform: translateX(-3px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes wireOut {
+
+    /* sortie : fade + slide gauche */
+    0% {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+}
+
+/* Typo/badges communs de la rangée noire */
+.news-chip {
+    font: 700 10px/18px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: .3px;
+    color: #0b0b0b;
+}
+
+.news-crypto {
+    background: #22c55e;
+}
+
+/* vert */
+.news-finance {
+    background: #3b82f6;
+}
+
+/* bleu */
+.news-ai {
+    background: #a855f7;
+}
+
+/* violet */
+.news-src {
+    opacity: .7;
+    font-weight: 600;
+    font-size: 12.5px;
+}
+
+/* nom de la source */
+.news-title {
+    color: #e6eaf2;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 13px;
+}
+
+/* titre */
+.news-title:hover {
+    text-decoration: underline;
+}
+
+/* Masques (dégradés haut/bas) : seulement sur la barre noire */
+.ticker-row--white::before,
+.ticker-row--white::after {
+    display: none !important;
+    content: none !important;
+}
+
+.ticker-row--black::before,
+.ticker-row--black::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 14px;
+    pointer-events: none;
+    /* décor pur */
+}
+
+.ticker-row--black::before {
+    top: 0;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, .35), transparent);
+}
+
+.ticker-row--black::after {
+    bottom: 0;
+    background: linear-gradient(to top, rgba(0, 0, 0, .35), transparent);
+}
+
+
+
+/* =============================
+   Chips "HKO prediction" + source
+   ============================= */
+.prediction-hko {
+    margin-top: .5rem;
+}
+
+/* espace au-dessus du bloc */
+
+.prediction-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    /* puce compacte */
+    padding: .35rem .6rem;
+    background: var(--card-muted);
+    /* fond gris clair */
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    /* bordure + arrondi */
+    font-weight: 600;
+    line-height: 1.2;
+    /* lisibilité */
+    font-variant-numeric: tabular-nums;
+    /* chiffres alignés */
+}
+
+.prediction-chip .sep {
+    opacity: .7;
+}
+
+/* séparateur atténué */
+
+.prediction-confidence-line {
+    margin-top: .25rem;
+    color: #6b7280;
+    font-size: .9rem;
+    /* ligne secondaire */
+}
+
+@media (max-width: 420px) {
+    .prediction-chip {
+        font-size: .95rem;
+    }
+
+    /* réduit légèrement la taille */
+    .prediction-confidence-line {
+        font-size: .85rem;
+    }
+}
+
+/* Chip de source (heure/prix/confiance) */
+.source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    /* éléments rapprochés */
+    padding: .15rem .45rem;
+    margin-left: .4rem;
+    /* marge depuis le label */
+    background: #f8f8f9;
+    border: 1px solid #e6e7eb;
+    /* fond clair + bordure */
+    border-radius: 8px;
+    font-size: .85rem;
+    font-weight: 600;
+    /* lisible mais compact */
+    color: #374151;
+    font-variant-numeric: tabular-nums;
+    /* colonnes de chiffres propres */
+}
+
+.source-chip .src-mid {
+    opacity: .6;
+}
+
+/* séparateur atténué */
+
+/* Force la chip sur une nouvelle ligne sous le label (si besoin) */
+.vibe-rotator .vibe-item {
+    gap: .4rem;
+    flex-wrap: wrap;
+}
+
+/* autorise retour à la ligne */
+.vibe-rotator .vibe-item .source-chip {
+    grid-column: 1 / -1;
+    justify-self: start;
+    width: fit-content;
+    /* rétrécit à son contenu */
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    /* réplique des styles */
+    padding: .14rem .55rem;
+    border-radius: 999px;
+    /* style "pilule" */
+    font-size: .92em;
+    font-variant-numeric: tabular-nums;
+    background: rgba(0, 0, 0, .05);
+    opacity: .65;
+    /* plus atténuée */
+}
+
+.vibe-rotator .vibe-item .src-mid {
+    opacity: .6;
+}
+
+/* =============================
+   Modal d'abonnement (accessible)
+   ============================= */
+.sub-modal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    z-index: 10000;
+}
+
+/* masqué par défaut */
+.sub-modal.is-open {
+    display: block;
+}
+
+/* affiché via JS */
+.sub-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .45);
+}
+
+/* overlay sombre */
+.sub-modal__dialog {
+    position: relative;
+    width: 92%;
+    max-width: 420px;
+    /* largeur fluide + max */
+    margin: 8vh auto;
+    padding: 18px 16px;
+    /* centrage vertical approx + padding */
+    background: #fff;
+    border-radius: 12px;
+    /* boîte blanche */
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+    /* ombre prononcée */
+}
+
+.sub-modal__close {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    border: 0;
+    background: transparent;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+.sub-modal__title {
+    margin: 0 0 6px;
+    font-size: 18px;
+}
+
+.sub-modal__text {
+    margin: 0 0 10px;
+    color: #4b5563;
+    font-size: 14px;
+}
+
+.sub-form__row {
+    margin-bottom: 10px;
+    display: block;
+}
+
+.sub-form__input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.sub-form__btn {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 0;
+    background: #0b1220;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.sub-form__btn:hover {
+    filter: brightness(1.08);
+}
+
+.sub-form__msg {
+    margin-top: 8px;
+    font-size: 13px;
+    min-height: 1em;
+}
+
+.sub-form__legal {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+
+
+
+
+
+
+/* === Bannière promo (HTML+CSS only) — visible ~5s, revient toutes ~3min === */
+:root {
+    --promo-cycle: 100s;
+    --promo-delay: 12s;
+    /* ⏱️ cycle complet (3 min). Mets 120s pour ~2 min. */
+}
+
+.promo-cta {
+    opacity: 0;
+    transform: translateY(-6px);
+    pointer-events: none;
+    /* pas cliquable tant qu’invisible */
+    animation: promo-cycle var(--promo-cycle) linear infinite;
+    animation-delay: var(--promo-delay);
+    /* ⬅️ délai initial */
+}
+
+/* accessibilité : si l’utilisateur demande moins d’animation, on l’affiche statique */
+@media (prefers-reduced-motion: reduce) {
+    .promo-cta {
+        animation: none;
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+    }
+}
+
+
+.promo-cta__link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border, #e5e7eb);
+    background: linear-gradient(180deg, #ffffff, #f8fafc);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+    text-decoration: none;
+    color: #0b1220;
+    font-weight: 600;
+    overflow: hidden;
+    /* pour le “shine” */
+}
+
+.promo-cta__logo {
+    height: 28px;
+    width: auto;
+    /* ton PNG 96×48 reste net */
+}
+
+.promo-cta__text {
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+/* Effet “shine” pendant l’affichage */
+.promo-cta__shine {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg,
+            transparent 0%,
+            rgba(255, 255, 255, 0.0) 35%,
+            rgba(255, 255, 255, 0.55) 50%,
+            rgba(255, 255, 255, 0.0) 65%,
+            transparent 100%);
+    transform: translateX(-120%);
+    animation: promo-shine 4.5s cubic-bezier(.2, .6, .2, 1) infinite;
+    pointer-events: none;
+}
+
+@media (hover:hover) and (pointer:fine) {
+    .promo-cta__link:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+        transform: translateY(-1px);
+    }
+}
+
+/* ⏱️ Timeline : visible ≈ 8s puis cachée jusqu'au prochain cycle
+   (0.5% → 5.0% de 180s ≈ 8.1s) */
+@keyframes promo-cycle {
+    0% {
+        opacity: 0;
+        transform: translateY(-6px);
+        pointer-events: none;
+    }
+
+    /* apparition rapide */
+    0.5% {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    /* reste visible jusqu'ici (~8s) */
+    5.0% {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+    }
+
+    /* disparition douce */
+    5.5% {
+        opacity: 0;
+        transform: translateY(-6px);
+        pointer-events: none;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translateY(-6px);
+        pointer-events: none;
+    }
+}
+
+
+/* Balayage “shine” */
+@keyframes promo-shine {
+    0% {
+        transform: translateX(-120%);
+    }
+
+    35% {
+        transform: translateX(120%);
+    }
+
+    100% {
+        transform: translateX(120%);
+    }
+}
+
+/* Accessibilité : pas d’animation si reduce-motion */
+@media (prefers-reduced-motion: reduce) {
+    .promo-cta {
+        animation: none;
+    }
+
+    .promo-cta__shine {
+        animation: none;
+    }
+}
+
+/* Mobile : compacte si l’espace est serré */
+@media (max-width: 640px) {
+    .promo-cta__link {
+        padding: 8px 10px;
+    }
+
+    .promo-cta__text {
+        max-width: 170px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+}
+
+
+
+
+
+/* =============================
+   Responsive (cartes, boutons, chart, header)
+   ============================= */
+@media (min-width: 641px) and (max-width: 768px) {
+    .scroll-btn {
+        width: 38px;
+        height: 38px;
+        background-size: 18px 18px;
+    }
+
+    /* on ne contraint pas la largeur du rail ici pour ne pas gêner le mobile */
+    .horizontal-scroll-container {
+        padding: 8px;
+        gap: 10px;
+    }
+
+    .crypto-card {
+        flex: 0 0 280px;
+        min-height: 150px;
+    }
+
+    .scroll-btn.left {
+        left: 5px;
+    }
+
+    .scroll-btn.right {
+        right: 5px;
+    }
+
+    .chart-container {
+        width: 90%;
+        padding: 10px;
+    }
+
+    .chart-loading {
+        font-size: 0.9em;
+    }
+
+    .logo {
+        width: 100px;
+        height: 67px;
+    }
+
+    .crypto-logo {
+        width: 22px;
+        height: 22px;
+    }
+
+    .crypto-name {
+        font-size: 1em;
+    }
+
+    .crypto-price {
+        font-size: 0.95em;
+    }
+
+    .vibe-item {
+        font-size: 0.85em;
+    }
+
+    .vibe-label {
+        font-size: 0.85em;
+    }
+
+    .sentiment-value {
+        font-size: 0.85em;
+    }
+
+    .sentiment-score {
+        font-size: 0.8em;
+    }
+
+    .prediction {
+        font-size: 0.85em;
+    }
+
+    .confidence {
+        font-size: 0.8em;
+    }
+
+    .vibe-next-btn {
+        font-size: 14px;
+    }
+}
+
+
+
+
+
+/* === MOBILE (≤ 640px) — cartes moins larges, moins d'air vertical, courbe recentrée === */
+@media (max-width: 640px) {
+    :root {
+        --arrow-size: 34px;
+        --arrow-gap: 10px;
+        --card-trim-mobile: 56px;
+        /* ↑ augmente pour rétrécir plus la carte (ex: 60–64px) */
+        --body-pad: 15px;
+        --center-bias: -8px;
+        /* (lu par le JS pour le micro-recentrage après scroll) */
+        --ticker-h: 42px;
+        --stack-gap: 6px;
+        --cards-top-gap: 6px;
+        --scrubber-size: 12px;
+        --scrubber-gap: 6px;
+        --ticker-nudge-mobile: 6px;
+
+
+
+    }
+
+    .logo {
+        height: var(--logo-h-mobile);
+        margin-top: 10px;
+        /* ↑ descendre un chouïa */
+    }
+
+    .dashboard-header {
+        padding-block: 14px;
+    }
+
+    /* FULL-BLEED propre du wrapper (ne dépend plus du padding du parent) */
+    .scroll-shell {
+        box-sizing: border-box;
+        width: 100vw;
+        max-width: 100vw;
+        position: relative;
+        left: 50%;
+        right: 50%;
+        margin-left: -50vw;
+        margin-right: -50vw;
+        /* ← colle aux bords du viewport */
+        margin-top: var(--cards-top-gap) !important;
+        margin-bottom: 2px;
+        /* ⬇ air vertical réduit ; place latérale pour les flèches */
+        padding: 4px calc(var(--arrow-size) + var(--arrow-gap));
+        padding-top: 4px;
+        padding-bottom: 0px;
+    }
+
+    /* Le rail remplit le wrapper ; snap centré conservé */
+    .horizontal-scroll-container {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 100%;
+        padding: 0;
+        gap: 12px;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: calc(var(--arrow-size) + var(--arrow-gap));
+        padding-bottom: calc(var(--scrubber-size) + var(--scrubber-gap));
+    }
+
+    .horizontal-scroll-container::-webkit-scrollbar {
+        height: var(--scrubber-size);
+    }
+
+    /* 1 carte par vue, un peu plus étroite ; pas de zoom = pas de “coupes” */
+    .crypto-card {
+        flex: 0 0 calc(100% - var(--card-trim-mobile)) !important;
+        min-height: 160px;
+    }
+
+    .crypto-card.selected,
+    .crypto-card.is-selected {
+        transform: none !important;
+    }
+
+    /* Flèches bien dans le viewport */
+    .scroll-btn {
+        top: 50%;
+        transform: translateY(-50%);
+        width: var(--arrow-size);
+        height: var(--arrow-size);
+        background-size: 18px 18px;
+    }
+
+    .scroll-btn.left {
+        left: var(--arrow-gap) !important;
+    }
+
+    .scroll-btn.right {
+        right: var(--arrow-gap) !important;
+    }
+
+    /* Courbe recentrée : largeur viewport, sans la “descendre” */
+    .chart-container {
+        box-sizing: border-box;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        margin: 0 calc(-1 * var(--body-pad)) 15px calc(-1 * var(--body-pad));
+        /* annule le padding du body */
+        padding-left: 12px;
+        padding-right: 12px;
+        /* respiration interne */
+    }
+
+    .ticker-wrap {
+        top: calc(var(--ticker-offset, 100px) + var(--ticker-nudge-mobile));
+    }
+}
+
+
+
+
+
+/* === MOBILE (≤ 640px) — bannière sur 3 lignes :
+      2 lignes de texte équilibrées + 1 ligne logo === */
+@media (max-width: 640px) {
+    :root {
+        /* Potentiomètres */
+        --promo-text-ch: 26ch;
+        /* largeur opti du bloc texte pour forcer 2 lignes (24–30ch) */
+        --promo-gap: 6px;
+        /* espace entre texte et logo */
+        --promo-logo-h: 22px;
+        /* hauteur du logo sous le texte */
+        --logo-h-mobile: 56px;
+    }
+
+    /* Le lien devient une pile verticale (texte au-dessus, logo dessous) */
+    .promo-cta__link {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--promo-gap);
+        padding: 8px 10px;
+        max-width: min(92vw, 380px);
+        /* évite tout débordement */
+    }
+
+    /* Bloc texte : on laisse le retour à la ligne et on “équilibre” visuellement */
+    .promo-cta__text {
+        order: 1;
+        white-space: normal;
+        /* autorise les sauts de ligne */
+        text-align: center;
+        font-size: clamp(12px, 3.4vw, 14px);
+        line-height: 1.25;
+        max-inline-size: var(--promo-text-ch);
+        /* force ~2 lignes */
+        text-wrap: balance;
+        /* répartit proprement (navigateurs récents) */
+        overflow: visible;
+        text-overflow: clip;
+    }
+
+    /* Logo en 3e ligne, un peu plus compact */
+    .promo-cta__logo {
+        order: 2;
+        height: var(--promo-logo-h);
+        width: auto;
+    }
+}
+
+
+
+/* CTA “HKO” + Generator (barre blanche, coin bas-droit) — apparition différée */
+:root {
+    --footer-cta-logo-h: 32px;
+    /* desktop : 32–36px max si tu veux plus grand */
+    --footer-cta-delay: 5s;
+    /* délai avant d’afficher le bouton */
+}
+
+.footer-generator-cta {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+    text-decoration: none;
+    color: #0b1220;
+    z-index: 2;
+
+    /* apparition après 5s puis reste visible */
+    opacity: 0;
+    pointer-events: none;
+    will-change: opacity, transform;
+    animation: footer-cta-reveal .6s ease-out forwards;
+    animation-delay: var(--footer-cta-delay);
+}
+
+.footer-generator-cta:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+}
+
+@keyframes footer-cta-reveal {
+    0% {
+        opacity: 0;
+        transform: translateY(-50%) translateY(-6px);
+    }
+
+    100% {
+        opacity: 1;
+        transform: translateY(-50%) translateY(0);
+        pointer-events: auto;
+    }
+}
+
+.footer-generator-cta__logo {
+    height: var(--footer-cta-logo-h);
+    width: auto;
+}
+
+.footer-generator-cta__txt {
+    font: 600 12px/1 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    letter-spacing: .2px;
+}
+
+/* Mobile : logo un peu + grand et libellé “Generator” visible */
+@media (max-width: 640px) {
+    :root {
+        --footer-cta-logo-h: 28px;
+        /* un poil plus grand qu’avant (était 16–20px) */
+    }
+
+    .footer-generator-cta {
+        right: 6px;
+        padding: 4px 8px;
+        gap: 6px;
+    }
+
+    .footer-generator-cta__txt {
+        display: inline;
+        /* montrer “Generator” en mobile */
+        font-size: 11px;
+        white-space: nowrap;
+        /* tient sur une ligne */
+    }
+}
+
+/* === MOBILE (≤ 640px) — Reddit 1 ligne recentrée + News 2 lignes === */
+@media (max-width: 640px) {
+
+    /* Potards (ajuste à l’œil) */
+    :root {
+        --white-h-mobile: 52px;
+        /* hauteur barre blanche (48 → 52) */
+        --white-item-top: -10px;
+        /* remonte légèrement l’item pour bien centrer */
+        --black-h-mobile: 58px;
+        /* hauteur barre noire (46 → 58) */
+    }
+
+    /* --- BARRE BLANCHE (Reddit : 1 ligne avec …) --- */
+    .ticker-row--white {
+        height: var(--white-h-mobile);
+    }
+
+    .ticker-row--white .ticker-content-fixed {
+        line-height: var(--white-h-mobile);
+        /* centre verticalement la ligne */
+    }
+
+    /* On garde le texte en 1 ligne (déjà en nowrap dans ta feuille),
+     on ajuste juste le placement vertical de l’item */
+    .ticker-row--white .ticker-item {
+        top: var(--white-item-top);
+    }
+
+    /* --- BARRE NOIRE (News : 2 lignes avec ellipse) --- */
+    .ticker-row--black {
+        height: var(--black-h-mobile);
+    }
+
+    .ticker-row--black .ticker-content {
+        min-height: var(--black-h-mobile);
+        align-items: center;
+    }
+
+    .wire-now {
+        height: auto;
+        /* autorise la croissance verticale */
+        white-space: normal;
+        /* permet le retour à la ligne */
+        align-items: flex-start;
+        /* badge + texte démarrent en haut */
+        gap: 8px;
+    }
+
+    .news-title {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        /* 2 lignes max (Chrome/Safari/Edge) */
+        line-clamp: 2;
+        /* future spec / fallback inoffensif */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.25;
+        max-height: calc(1.25em * 2);
+        font-size: 13px;
+        /* compact mais lisible */
+    }
+}
+
+/* === MOBILE (≤ 640px) — Reddit 1 ligne recentrée + News 2 lignes === */
+@media (max-width: 640px) {
+
+    /* Potards (ajuste à l’œil) */
+    :root {
+        --white-h-mobile: 52px;
+        /* hauteur barre blanche (48 → 52) */
+        --white-item-top-mobile: -18px;
+        /* plus négatif = plus haut (centrage visuel) */
+        --black-h-mobile: 60px;
+        /* hauteur barre noire (46 → 60) */
+    }
+
+    /* --- BARRE BLANCHE : 1 ligne, juste un petit recentrage vertical --- */
+    .ticker-row--white {
+        height: var(--white-h-mobile);
+    }
+
+    .ticker-row--white .ticker-content-fixed {
+        line-height: var(--white-h-mobile);
+        /* centre la ligne */
+    }
+
+    .ticker-row--white .ticker-item {
+        top: var(--white-item-top-mobile);
+        /* remonte/descend légèrement */
+    }
+
+    /* --- BARRE NOIRE : titre sur 2 lignes + ellipsis --- */
+    .ticker-row--black {
+        height: var(--black-h-mobile);
+    }
+
+    .ticker-row--black .ticker-content {
+        min-height: var(--black-h-mobile);
+        align-items: center;
+    }
+
+    .wire-now {
+        height: auto;
+        /* autorise 2 lignes */
+        white-space: normal;
+        align-items: flex-start;
+        /* badge + texte démarrent en haut */
+        gap: 8px;
+    }
+
+    .news-title {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        /* Chrome/Safari/Edge */
+        line-clamp: 2;
+        /* future spec (inoffensif ailleurs) */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.25;
+        max-height: calc(1.25em * 2);
+        font-size: 13px;
+    }
+}
+
+/* === MOBILE (≤ 640px) — Barre noire sur 2 lignes === */
+@media (max-width: 640px) {
+    :root {
+        --black-h-mobile: 60px;
+        /* ajuste à l’œil : 58–64px */
+    }
+
+    /* barre + conteneur un peu plus hauts */
+    .ticker-row--black {
+        height: var(--black-h-mobile);
+    }
+
+    .ticker-row--black .ticker-content {
+        min-height: var(--black-h-mobile);
+        align-items: center;
+    }
+
+    /* autoriser le retour à la ligne dans l’élément injecté */
+    .wire-now {
+        height: auto !important;
+        white-space: normal !important;
+    }
+
+    /* titre des news : tronqué sur 2 lignes */
+    .news-title {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        /* Chrome/Safari/Edge */
+        line-clamp: 2;
+        /* futur standard, inoffensif ailleurs */
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.25;
+        max-height: calc(1.25em * 2);
+        font-size: 13px;
+        /* compact mais lisible */
+    }
+}
+
+
+
+/* === XS mobile (≤ 400px) — réduit l'espace entre cartes et courbe === */
+@media (max-width: 400px) {
+    :root {
+        /* 2 tickers (48+46) + éventuel safe-area iOS */
+        --footer-safe: calc(94px + env(safe-area-inset-bottom, 0px));
+        --cards-chart-gap: 8px;
+        /* ← écart voulu entre cartes et courbe (réglable) */
+    }
+
+    /* Laisse de l'espace en BAS de page, pas entre les blocs */
+    body.dashboard-body {
+        padding-bottom: calc(var(--footer-safe) + 12px) !important;
+    }
+
+    /* GAP juste entre le bloc cartes et la courbe */
+    .scroll-shell {
+        margin-bottom: var(--cards-chart-gap) !important;
+        /* avant: calc(var(--footer-safe)+8px) */
+    }
+
+    .chart-container {
+        /* pas d'espace inutile au-dessus ; espace en bas pour les tickers */
+        margin-top: 0 !important;
+        margin-bottom: calc(var(--footer-safe) + 8px) !important;
+    }
+
+    /* Tu peux, si besoin, compacter un poil la courbe */
+    #price-chart {
+        height: clamp(220px, 42vh, 300px) !important;
+    }
+}
+
+
+@media (max-width:640px) {
+    .horizontal-scroll-container.is-scrolling .crypto-card {
+        opacity: 1 !important;
+        filter: none !important;
+        transform: none !important;
+    }
+
+    .horizontal-scroll-container.cards-dimmed .crypto-card:not(.is-current) {
+        opacity: 0 !important;
+        /* mets 0.1 si tu préfères */
+        filter: grayscale(100%) !important;
+        pointer-events: none;
+        transition: opacity 160ms ease, filter 160ms ease;
+    }
+
+    .horizontal-scroll-container .crypto-card.is-current {
+        opacity: 1 !important;
+        filter: none !important;
+        pointer-events: auto;
+    }
+}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Conseils de sécurité - Blog</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='styles.css') }}"
+    />
+  </head>
+  <body class="blog-page">
+    <header class="blog-header">
+      <h1 class="blog-title">Blog du Générateur de Mots de Passe</h1>
+      <button class="back-button" onclick="window.close()">
+        Retour au générateur
+      </button>
+    </header>
+    <main>
+      <article class="blog-article">
+        <h2>Conseils de sécurité pour vos mots de passe</h2>
+        <p>
+          Bien choisir un mot de passe est essentiel pour protéger vos comptes
+          en ligne. Voici quelques conseils pratiques :
+        </p>
+        <ul>
+          <li>
+            <strong>Longueur</strong> : Utilisez au moins 12 caractères pour
+            rendre votre mot de passe plus difficile à craquer.
+          </li>
+          <li>
+            <strong>Diversité</strong> : Mélangez lettres majuscules,
+            minuscules, chiffres et caractères spéciaux (ex. !, @, #).
+          </li>
+          <li>
+            <strong>Originalité</strong> : Évitez les mots courants (ex.
+            "password") ou infos personnelles (ex. date de naissance).
+          </li>
+          <li>
+            <strong>Unicité</strong> : Utilisez un mot de passe différent pour
+            chaque compte.
+          </li>
+          <li>
+            <strong>Gestion</strong> : Envisagez un gestionnaire de mots de
+            passe pour stocker vos créations sécurisées.
+          </li>
+        </ul>
+        <p>
+          Avec notre générateur, créez des mots de passe robustes en un clic !
+          Revenez régulièrement sur ce blog pour plus de conseils.
+        </p>
+      </article>
+    </main>
+  </body>
+</html>
