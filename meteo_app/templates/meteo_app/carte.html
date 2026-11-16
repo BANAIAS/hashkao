@@ -120,6 +120,31 @@
 
         }
 
+        .legende-pluie {
+            display: none;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 14px;
+            margin-top: 20px;
+            color: #c8d2db;
+            font-size: 14px;
+        }
+
+        .legende-pluie .pastille {
+            display: inline-block;
+            width: 18px;
+            height: 12px;
+            margin-right: 6px;
+            border-radius: 3px;
+            vertical-align: middle;
+        }
+
+        .legende-pluie .note {
+            flex-basis: 100%;
+            color: #a9b7c4;
+            font-size: 13px;
+        }
+
         @media (max-width: 700px) {
             h1 { font-size: 24px; }
 
@@ -189,6 +214,8 @@
         <div class="degrade"></div>
         <span id="maximum">40 °C</span>
     </div>
+
+    <div class="legende-pluie" id="legende-pluie"></div>
 
 
     <div id="infos">Chargement des observations...</div>
@@ -701,7 +728,22 @@ curseurRelief.addEventListener("input", function () {
 const groupe = svg.append("g")
     .attr("class", "stations-meteo");
 
-// Couche des précipitations pour le deuxième tableau météo
+// Couche du radar de précipitations (image Mercator transparente)
+const coucheRadar = svg.append("g")
+    .attr("class", "couche-radar")
+    .style("display", "none")
+    .attr("pointer-events", "none");
+
+const imageRadar = coucheRadar.append("image")
+    .attr("preserveAspectRatio", "none");
+
+// Frontières des pays, dessinées au-dessus du radar
+const frontieresRadar = svg.append("g")
+    .attr("class", "frontieres-radar")
+    .style("display", "none")
+    .attr("pointer-events", "none");
+
+// Couche des précipitations par station (repli si le radar est absent)
 const couchePluie = svg.append("g")
     .attr("class", "couche-pluie")
     .style("display", "none")
@@ -753,6 +795,15 @@ d3.json("{% static 'meteo_app/geo/pays_monde_50m.geojson' %}")
             .attr("fill", "#aebbc3")
             .attr("stroke", "#71838e")
             .attr("stroke-width", 0.5);
+
+        frontieresRadar.selectAll("path")
+            .data(paysSansFrance)
+            .join("path")
+            .attr("d", cheminGeo)
+            .attr("fill", "none")
+            .attr("stroke", "#172530")
+            .attr("stroke-width", 0.6)
+            .attr("stroke-opacity", 0.55);
 
         console.log("Frontières des pays chargées");
 
@@ -1337,6 +1388,151 @@ function dessinerCarteThermique() {
     );
 }
 
+// ---------------------------------------------------------------
+// Radar de précipitations Météo-France
+// ---------------------------------------------------------------
+// radar.png et radar.json sont produits par la commande
+// python manage.py convertir_radar <fichier.h5>
+// (voir meteo_app/radar.py).
+// L'image est déjà en projection Mercator : il suffit de la poser
+// entre les coins de son emprise, sans recalcul de pixels.
+const urlRadarJson =
+    "{% get_static_prefix %}meteo_app/radar/radar.json";
+
+let radar = null;
+let texteDateStations = "";
+
+function heureRadar() {
+    if (!radar || !radar.date_utc) return "heure inconnue";
+
+    return new Date(radar.date_utc).toLocaleString("fr-FR", {
+        timeZone: "Europe/Paris",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+}
+
+function positionnerRadar() {
+    if (!radar) return;
+
+    const [ouest, sud, est, nord] = radar.emprise;
+
+    const [x0, y0] = projection([ouest, nord]);
+    const [x1, y1] = projection([est, sud]);
+
+    imageRadar
+        .attr("x", x0)
+        .attr("y", y0)
+        .attr("width", x1 - x0)
+        .attr("height", y1 - y0);
+}
+
+function construireLegendePluie() {
+    const legende = d3.select("#legende-pluie");
+
+    legende.selectAll("*").remove();
+
+    if (!radar) return;
+
+    legende.append("span")
+        .text(`Précipitations (${radar.unite}) :`);
+
+    radar.seuils.forEach((seuil, indice) => {
+        const dernier = indice === radar.seuils.length - 1;
+        const element = legende.append("span");
+
+        element.append("span")
+            .attr("class", "pastille")
+            .style("background", radar.couleurs[indice]);
+
+        element.append("span").text(
+            String(seuil).replace(".", ",") + (dernier ? " et +" : "")
+        );
+    });
+
+    legende.append("span")
+        .attr("class", "note")
+        .text(
+            "Sans couleur : pas de pluie détectée ou zone hors couverture radar."
+        );
+}
+
+function afficherLegendePluie(visible) {
+    d3.select("#legende-pluie").style("display", visible ? "flex" : "none");
+    d3.select(".legende").style("display", visible ? "none" : null);
+}
+
+function radarValide(meta) {
+    return (
+        meta &&
+        meta.projection === "mercator" &&
+        typeof meta.image === "string" &&
+        Array.isArray(meta.emprise) &&
+        meta.emprise.length === 4 &&
+        meta.emprise.every(Number.isFinite) &&
+        Array.isArray(meta.seuils) &&
+        Array.isArray(meta.couleurs) &&
+        meta.seuils.length === meta.couleurs.length
+    );
+}
+
+function chargerRadar() {
+    return fetch(urlRadarJson, { cache: "no-store" })
+        .then(reponse => {
+            if (!reponse.ok) {
+                throw new Error(`radar.json : ${reponse.status}`);
+            }
+            return reponse.json();
+        })
+        .then(meta => {
+            if (!radarValide(meta)) {
+                throw new Error("radar.json : contenu inattendu");
+            }
+
+            // Rien à faire si les données n'ont pas changé
+            if (radar && radar.date_utc === meta.date_utc) return;
+
+            radar = meta;
+
+            const urlImage = new URL(
+                meta.image,
+                new URL(urlRadarJson, window.location.href)
+            );
+
+            urlImage.searchParams.set("v", meta.date_utc || "");
+
+            imageRadar.attr("href", urlImage.href);
+
+            positionnerRadar();
+            construireLegendePluie();
+
+            console.log("Radar chargé :", meta.date_utc, meta.emprise);
+
+            const mode = d3.select("#affichage").property("value");
+            const parametre = d3.select("#parametre").property("value");
+
+            if (mode === "thermique" && parametre === "precipitation") {
+                changerAffichage();
+            }
+        })
+        .catch(erreur => {
+            console.warn(
+                "Radar indisponible, affichage des stations à la place :",
+                erreur.message
+            );
+        });
+}
+
+chargerRadar();
+
+// Préparation de la mise à jour automatique : toutes les 5 minutes,
+// on relit radar.json ; l'image n'est remplacée que si l'heure a changé.
+setInterval(chargerRadar, 5 * 60 * 1000);
+
+
 function dessinerPluie() {
     couchePluie.selectAll("*").remove();
 
@@ -1425,11 +1621,11 @@ d3.json("{% url 'meteo_app:api_carte' %}")
         stations = donnees.stations;
 
 
-    d3.select("#date-observation").text(
-        donnees.date
-            ? new Date(donnees.date).toLocaleString("fr-FR")
-            : "Aucune observation"
-    );
+    texteDateStations = donnees.date
+        ? new Date(donnees.date).toLocaleString("fr-FR")
+        : "Aucune observation";
+
+    d3.select("#date-observation").text(texteDateStations);
 
     d3.select("#infos").text(
         `${stations.filter(s => s.temperature !== null).length} stations avec température mesurée — Survolez un point pour afficher ses informations.`
@@ -1457,8 +1653,19 @@ function changerAffichage() {
     const mode = d3.select("#affichage").property("value");
     const parametre = d3.select("#parametre").property("value");
 
-    // Masquer la pluie par défaut
+    // Masquer la pluie et le radar par défaut
     couchePluie.style("display", "none");
+    coucheRadar.style("display", "none");
+    frontieresRadar.style("display", "none");
+    afficherLegendePluie(false);
+    d3.select("#date-observation").text(texteDateStations);
+
+    // Rétablir la légende des températures après un passage
+    // par le mode Précipitations
+    if (parametre === "temperature") {
+        d3.select("#minimum").text("−10 °C");
+        d3.select("#maximum").text("40 °C");
+    }
 
     // Tableau 2 : précipitations sur le relief
     if (mode === "thermique" && parametre === "precipitation") {
@@ -1469,6 +1676,28 @@ function changerAffichage() {
         contoursThermiques.style("display", null);
 
         dessinerRelief(true);
+
+        // Radar disponible : il remplace les cercles des stations
+        if (radar) {
+            positionnerRadar();
+
+            coucheRadar.style("display", null);
+            frontieresRadar.style("display", null);
+            afficherLegendePluie(true);
+
+            d3.select("#date-observation").text(
+                `Radar : ${heureRadar()}`
+            );
+
+            d3.select("#infos").text(
+                "Précipitations estimées par la mosaïque radar Météo-France " +
+                `(${radar.unite}), données du ${heureRadar()}.`
+            );
+
+            return;
+        }
+
+        // Repli : cercles des stations ayant mesuré de la pluie
         dessinerPluie();
 
         couchePluie.style("display", null);
@@ -1583,6 +1812,9 @@ function redimensionnerCarte() {
 
     // 3. Tracés vectoriels (pays, départements, contours)
     svg.selectAll("path").attr("d", cheminGeo);
+
+    // Radar : simple repositionnement, l'image est déjà en Mercator
+    positionnerRadar();
 
     // 4. Rasters : relief européen, puis le mode d'affichage actif
     thermiqueCalculee = false;
