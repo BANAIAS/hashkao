@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "home",
     "generator",
     "crypto_vibe",
+    "meteo_app",
     
 ]
 

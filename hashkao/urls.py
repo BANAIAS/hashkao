@@ -19,6 +19,9 @@ def whoami(_request):
 urlpatterns = [
     path("__whoami__", whoami),
 
+    # Application météo
+    path("meteo/", include("meteo_app.urls")),
+
     # Home = Crypto-Vibe à la racine
     path("", include(("crypto_vibe.urls", "crypto_vibe"), namespace="crypto_vibe")),
 

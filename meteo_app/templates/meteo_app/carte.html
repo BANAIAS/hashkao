@@ -1,0 +1,1604 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>France en temps réel — Hashkao</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: #101820;
+            color: #f5f7fa;
+            font-family: Arial, sans-serif;
+        }
+
+        header {
+            padding: 28px 5%;
+            border-bottom: 1px solid #30404c;
+        }
+
+        h1 {
+            margin: 0 0 10px;
+            font-size: 30px;
+        }
+
+        .sous-titre {
+            color: #a9b7c4;
+        }
+
+        main {
+            max-width: 1400px;
+            margin: auto;
+            padding: 30px 5%;
+        }
+
+        .commandes {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        select {
+            background: #243541;
+            color: white;
+            border: 1px solid #526574;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 15px;
+        }
+
+        #carte {
+            width: 100%;
+            height: 650px;
+            background: #172530;
+            border: 1px solid #30404c;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        #carte svg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .station {
+            cursor: pointer;
+            stroke: #101820;
+            stroke-width: 0.5;
+            opacity: 0.85;
+        }
+
+        .station:hover {
+            stroke: white;
+            stroke-width: 2;
+            opacity: 1;
+        }
+
+        #infos {
+            margin-top: 15px;
+            color: #a9b7c4;
+        }
+
+        .legende {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 20px;
+            color: #c8d2db;
+        }
+
+        .degrade {
+            width: 240px;
+            height: 12px;
+            border-radius: 6px;
+
+
+
+        background: linear-gradient(
+            to right,
+            #3447A8 0%,
+            #428ED1 20%,
+            #58C7CF 30%,
+            #83C979 40%,
+            #E5D66D 50%,
+            #F2AD55 60%,
+            #ED8145 70%,
+            #DB493D 80%,
+            #992C43 100%
+        );
+
+
+
+        }
+
+        @media (max-width: 700px) {
+            h1 { font-size: 24px; }
+
+        }
+    </style>
+</head>
+
+<body>
+
+<header>
+    <h1>France — Observations météorologiques</h1>
+    <div class="sous-titre">
+        Une exploration des mesures du réseau Météo-France
+    </div>
+</header>
+
+<main>
+    <div class="commandes">
+        <label for="parametre">Visualiser :</label>
+
+        <select id="parametre">
+            <option value="temperature">Température</option>
+            <option value="humidite">Humidité</option>
+            <option value="vent">Vent</option>
+            <option value="precipitation">Précipitations</option>
+        </select>
+
+        <label for="affichage">Affichage :</label>
+
+        <select id="affichage">
+            <option value="stations">Stations</option>
+            <option value="thermique">Carte thermique</option>
+            <option value="relief">Relief topographique</option>
+        </select>
+
+        <label for="methode-interpolation">Interpolation :</label>
+
+        <select id="methode-interpolation">
+            <option value="relief">Avec relief</option>
+            <option value="classique">Classique</option>
+        </select>
+
+        <label for="intensite-relief">Relief visuel :</label>
+
+        <input
+            type="range"
+            id="intensite-relief"
+            min="0"
+            max="100"
+            value="30"
+            step="5"
+        >
+
+        <span id="valeur-relief">30 %</span>
+
+
+
+
+        <span id="date-observation"></span>
+    </div>
+
+    <div id="carte"></div>
+
+
+    <div class="legende">
+        <span id="minimum">−10 °C</span>
+        <div class="degrade"></div>
+        <span id="maximum">40 °C</span>
+    </div>
+
+
+    <div id="infos">Chargement des observations...</div>
+</main>
+
+<script>
+const elementCarte = document.getElementById("carte");
+
+let largeur = Math.round(elementCarte.clientWidth);
+let hauteur = Math.round(elementCarte.clientHeight);
+
+// À 2500, la France occupe le cadrage actuel dans une zone de 1000 x 650.
+// Quand le cadre est plus petit, l'échelle diminue pour que le même
+// cadrage reste entièrement visible.
+function echelleProjection() {
+    return 2500 * Math.min(largeur / 1000, hauteur / 650);
+}
+
+
+
+
+let reliefFrance = null;
+
+
+let reliefEurope = null;
+
+async function chargerReliefEurope() {
+    const url = "{% static 'meteo_app/relief/relief_europe.json.gz' %}";
+
+    const reponse = await fetch(url);
+
+    if (!reponse.ok) {
+        throw new Error(
+            `Chargement du relief européen impossible : ${reponse.status}`
+        );
+    }
+
+    reliefEurope = await reponse.json();
+
+    console.log("Relief européen chargé :", {
+        largeur: reliefEurope.largeur,
+        hauteur: reliefEurope.hauteur,
+        bounds: reliefEurope.bounds
+    });
+}
+
+
+
+chargerReliefEurope()
+    .then(() => {
+        console.log("Relief européen disponible");
+
+        if (reliefFrance && geometriePaysEurope) {
+            dessinerReliefEurope();
+            dessinerRelief(true, true);
+            console.log("Relief européen redessiné");
+        }
+    })
+    .catch(erreur => {
+        console.error("ERREUR relief européen :", erreur);
+    });
+
+
+
+
+
+async function chargerRelief() {
+    const url = "{% static 'meteo_app/relief/relief_france.json.gz' %}";
+
+    const reponse = await fetch(url);
+
+    if (!reponse.ok) {
+        throw new Error(
+            `Chargement du relief impossible : ${reponse.status}`
+        );
+    }
+
+    reliefFrance = await reponse.json();
+
+    console.log("Relief Copernicus chargé :", {
+        largeur: reliefFrance.largeur,
+        hauteur: reliefFrance.hauteur,
+        bounds: reliefFrance.bounds
+    });
+}
+
+
+
+chargerRelief()
+    .then(() => {
+        console.log("Relief disponible pour l'interpolation");
+
+        // Calculer l'ombrage topographique une seule fois
+
+        // Calculer d'abord le relief européen
+        dessinerReliefEurope();
+
+        // Restaurer ensuite le relief français
+        dessinerRelief(true, true);
+
+        console.log("Reliefs européen et français calculés");
+
+
+
+        const affichage = document.getElementById("affichage");
+
+
+        if (
+            affichage &&
+            affichage.value === "thermique" &&
+            document.getElementById("methode-interpolation").value === "relief"
+        ) {
+            thermiqueCalculee = false;
+            changerAffichage();
+        }
+
+    })
+    .catch(erreur => {
+        console.error("Erreur relief Copernicus :", erreur);
+    });
+
+
+
+function altitudeTerrain(longitude, latitude) {
+    if (!reliefFrance) {
+        return null;
+    }
+
+    const [ouest, sud, est, nord] = reliefFrance.bounds;
+
+    const colonne = Math.floor(
+        (longitude - ouest) * reliefFrance.resolution
+    );
+
+    const ligne = Math.floor(
+        (nord - latitude) * reliefFrance.resolution
+    );
+
+    if (
+        colonne < 0 ||
+        colonne >= reliefFrance.largeur ||
+        ligne < 0 ||
+        ligne >= reliefFrance.hauteur
+    ) {
+        return null;
+    }
+
+    
+    const altitude = reliefFrance.altitudes[ligne][colonne];
+
+
+    return Number.isFinite(altitude) ? altitude : null;
+}
+
+
+function altitudeTerrainEurope(longitude, latitude) {
+    if (!reliefEurope) {
+        return null;
+    }
+
+    const [ouest, sud, est, nord] = reliefEurope.bounds;
+
+    const colonne = Math.floor(
+        (longitude - ouest) * reliefEurope.resolution
+    );
+
+    const ligne = Math.floor(
+        (nord - latitude) * reliefEurope.resolution
+    );
+
+    if (
+        colonne < 0 ||
+        colonne >= reliefEurope.largeur ||
+        ligne < 0 ||
+        ligne >= reliefEurope.hauteur
+    ) {
+        return null;
+    }
+
+    const altitude = reliefEurope.altitudes[ligne][colonne];
+
+    return Number.isFinite(altitude) ? altitude : null;
+}
+
+
+function penteTerrainEurope(longitude, latitude) {
+    if (!reliefEurope) {
+        return null;
+    }
+
+    const pas = 1 / reliefEurope.resolution;
+
+    const ouest = altitudeTerrainEurope(longitude - pas, latitude);
+    const est = altitudeTerrainEurope(longitude + pas, latitude);
+    const nord = altitudeTerrainEurope(longitude, latitude + pas);
+    const sud = altitudeTerrainEurope(longitude, latitude - pas);
+
+    if (![ouest, est, nord, sud].every(Number.isFinite)) {
+        return null;
+    }
+
+    const latitudeRad = latitude * Math.PI / 180;
+
+    const distanceX = 111320 * Math.cos(latitudeRad) * 2 * pas;
+    const distanceY = 111320 * 2 * pas;
+
+    return {
+        penteEst: (est - ouest) / distanceX,
+        penteNord: (nord - sud) / distanceY
+    };
+}
+
+
+function eclairageTerrainEurope(longitude, latitude) {
+    const pente = penteTerrainEurope(longitude, latitude);
+
+    if (!pente) {
+        return null;
+    }
+
+    // Lumière venant du nord-ouest, à 45 degrés
+    const azimut = 315 * Math.PI / 180;
+    const hauteurSoleil = 45 * Math.PI / 180;
+
+    const lumiereX = Math.sin(azimut) * Math.cos(hauteurSoleil);
+    const lumiereY = Math.cos(azimut) * Math.cos(hauteurSoleil);
+    const lumiereZ = Math.sin(hauteurSoleil);
+
+    // Normale à la surface
+    const nx = -pente.penteEst;
+    const ny = -pente.penteNord;
+    const nz = 1;
+
+    const longueur = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+    return Math.max(
+        0,
+        (nx * lumiereX + ny * lumiereY + nz * lumiereZ) / longueur
+    );
+}
+
+
+function penteTerrain(longitude, latitude) {
+    if (!reliefFrance) {
+        return null;
+    }
+
+    const pas = 1 / reliefFrance.resolution;
+
+    const ouest = altitudeTerrain(longitude - pas, latitude);
+    const est = altitudeTerrain(longitude + pas, latitude);
+    const nord = altitudeTerrain(longitude, latitude + pas);
+    const sud = altitudeTerrain(longitude, latitude - pas);
+
+    if (![ouest, est, nord, sud].every(Number.isFinite)) {
+        return null;
+    }
+
+    const latitudeRad = latitude * Math.PI / 180;
+
+    // Distance approximative en mètres entre deux cellules
+    const distanceX = 111320 * Math.cos(latitudeRad) * 2 * pas;
+    const distanceY = 111320 * 2 * pas;
+
+    return {
+        penteEst: (est - ouest) / distanceX,
+        penteNord: (nord - sud) / distanceY
+    };
+}
+
+
+function eclairageTerrain(longitude, latitude) {
+    const pente = penteTerrain(longitude, latitude);
+
+    if (!pente) {
+        return null;
+    }
+
+    // Direction de la lumière : nord-ouest
+    // Hauteur de la lumière : 45 degrés
+    const azimut = 315 * Math.PI / 180;
+    const hauteurSoleil = 45 * Math.PI / 180;
+
+    // Vecteur représentant la lumière
+    const lumiereX = Math.sin(azimut) * Math.cos(hauteurSoleil);
+    const lumiereY = Math.cos(azimut) * Math.cos(hauteurSoleil);
+    const lumiereZ = Math.sin(hauteurSoleil);
+
+    // Normale à la surface du terrain
+    const nx = -pente.penteEst;
+    const ny = -pente.penteNord;
+    const nz = 1;
+
+    const longueur = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+    // Intensité lumineuse comprise entre 0 et 1
+    return Math.max(
+        0,
+        (nx * lumiereX + ny * lumiereY + nz * lumiereZ) / longueur
+    );
+}
+
+
+
+
+
+
+function dessinerRelief(fondOpaque = true, decouperFrance = true) {
+    if (!reliefFrance) return;
+    const tailleCelluleRelief = 1;
+
+    contexteRelief.clearRect(0, 0, largeur, hauteur);
+
+
+
+    // Fond gris uniquement pour le mode topographique
+    if (fondOpaque) {
+        contexteRelief.fillStyle = "#aebbc3";
+        contexteRelief.fillRect(0, 0, largeur, hauteur);
+    }
+
+
+
+    for (let y = 0; y < hauteur; y += tailleCelluleRelief) {
+        for (let x = 0; x < largeur; x += tailleCelluleRelief) {
+
+            const coordonnees = projection.invert([
+                x + tailleCelluleRelief / 2,
+                y + tailleCelluleRelief / 2
+            ]);
+
+            if (!coordonnees) continue;
+
+            const [longitude, latitude] = coordonnees;
+            const lumiere = eclairageTerrain(longitude, latitude);
+
+            if (lumiere === null) continue;
+
+            // Éclairage de référence d'un terrain horizontal
+            const reference = Math.sin(Math.PI / 4);
+            const difference = lumiere - reference;
+
+            // Noir pour les ombres, blanc pour les versants éclairés
+
+            const couleur = difference < 0 ? 0 : 255;
+
+            const intensite = decouperFrance ? 2.5 : 1.5;
+            const opacite = Math.min(
+                decouperFrance ? 0.75 : 0.45,
+                Math.abs(difference) * intensite
+            );
+
+
+            contexteRelief.fillStyle =
+                `rgba(${couleur}, ${couleur}, ${couleur}, ${opacite})`;
+
+            contexteRelief.fillRect(
+                x, y, tailleCelluleRelief, tailleCelluleRelief
+            );
+        }
+    }
+
+
+    // Découper l'ombrage selon les frontières françaises
+    if (decouperFrance && geometrieFrance) {
+        contexteRelief.save();
+        contexteRelief.globalCompositeOperation = "destination-in";
+
+        const cheminRelief = d3.geoPath(
+            projection,
+            contexteRelief
+        );
+
+        contexteRelief.beginPath();
+        cheminRelief(geometrieFrance);
+
+        contexteRelief.fillStyle = "#ffffff";
+        contexteRelief.fill();
+
+        contexteRelief.restore();
+    }
+
+
+    imageRelief.attr(
+        "href",
+        canvasRelief.toDataURL("image/png")
+    );
+}
+
+
+let geometriePaysEurope = null;
+
+function dessinerReliefEurope() {
+
+    if (!reliefEurope) return;
+
+    // Utiliser temporairement le relief européen
+    // pour le calcul topographique existant
+    const reliefOriginal = reliefFrance;
+
+    try {
+        reliefFrance = reliefEurope;
+        dessinerRelief(true, false);
+    } finally {
+        reliefFrance = reliefOriginal;
+    }
+
+    // Copier le résultat dans le canvas européen
+    contexteEurope.clearRect(0, 0, largeur, hauteur);
+    contexteEurope.drawImage(canvasRelief, 0, 0);
+
+
+    // Conserver uniquement les terres émergées
+    if (geometriePaysEurope) {
+        contexteEurope.save();
+
+        contexteEurope.globalCompositeOperation = "destination-in";
+
+        const cheminPays = d3.geoPath(
+            projection,
+            contexteEurope
+        );
+
+        contexteEurope.beginPath();
+        cheminPays(geometriePaysEurope);
+
+        contexteEurope.fillStyle = "#ffffff";
+        contexteEurope.fill();
+
+        contexteEurope.restore();
+    }
+
+
+    // Envoyer l'image vers la couche SVG européenne
+    imageEurope.attr(
+        "href",
+        canvasEurope.toDataURL("image/png")
+    );
+}
+
+
+
+const svg = d3.select("#carte")
+    .append("svg")
+    .attr("viewBox", `0 0 ${largeur} ${hauteur}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
+
+const projection = d3.geoMercator()
+    .center([2.5, 46.5])
+    .scale(echelleProjection())
+    .translate([largeur / 2, hauteur / 2]);
+
+
+const fondPaysEurope = svg.append("g")
+    .attr("class", "fond-pays-europe");
+
+
+
+const coucheEurope = svg.append("g")
+    .attr("class", "couche-europe");
+
+const imageEurope = coucheEurope.append("image")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", largeur)
+    .attr("height", hauteur)
+    .attr("preserveAspectRatio", "none")
+    .attr("pointer-events", "none");
+
+
+const fondCarte = svg.append("g")
+    .attr("class", "fond-carte");
+
+// Couche destinée aux températures interpolées
+const coucheThermique = svg.append("g")
+    .attr("class", "couche-thermique")
+    .style("display", "none");
+
+
+const coucheRelief = svg.append("g")
+    .attr("class", "couche-relief")
+    .style("display", "none");
+
+
+const imageRelief = coucheRelief.append("image")
+    .attr("width", largeur)
+    .attr("height", hauteur)
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("preserveAspectRatio", "none")
+    .attr("opacity", 0.3)
+    .attr("pointer-events", "none");
+
+
+const curseurRelief = document.getElementById("intensite-relief");
+const valeurRelief = document.getElementById("valeur-relief");
+
+curseurRelief.addEventListener("input", function () {
+    const intensite = Number(this.value);
+
+    valeurRelief.textContent = intensite + " %";
+
+    imageRelief.attr("opacity", intensite / 100);
+});
+
+
+
+
+// Couche des observations réelles
+const groupe = svg.append("g")
+    .attr("class", "stations-meteo");
+
+// Couche des précipitations pour le deuxième tableau météo
+const couchePluie = svg.append("g")
+    .attr("class", "couche-pluie")
+    .style("display", "none")
+    .attr("pointer-events", "none");
+
+
+const contoursThermiques = svg.append("g")
+    .attr("class", "contours-thermiques")
+    .style("display", "none");
+
+// Couche des températures affichées sur la carte
+const coucheTemperatures = svg.append("g")
+    .attr("class", "temperatures-carte")
+    .style("display", "none");
+
+
+
+
+const cheminGeo = d3.geoPath().projection(projection);
+
+
+// Charger les frontières des pays européens
+d3.json("{% static 'meteo_app/geo/pays_monde_50m.geojson' %}")
+    .then(geojson => {
+
+        // Retirer la France du fond européen.
+        // La France est déjà dessinée avec les départements,
+        // dont les contours sont plus précis.
+        const paysSansFrance = geojson.features.filter(
+            pays => pays.properties.ADM0_A3 !== "FRA"
+        );
+
+        geometriePaysEurope = {
+            type: "FeatureCollection",
+            features: paysSansFrance
+        };
+
+
+        if (reliefFrance) {
+            dessinerReliefEurope();
+            dessinerRelief(true, true);
+        }
+
+
+        fondPaysEurope.selectAll("path")
+            .data(paysSansFrance)
+            .join("path")
+            .attr("d", cheminGeo)
+            .attr("fill", "#aebbc3")
+            .attr("stroke", "#71838e")
+            .attr("stroke-width", 0.5);
+
+        console.log("Frontières des pays chargées");
+
+    })
+    .catch(erreur => {
+        console.error("Erreur chargement des pays :", erreur);
+    });
+
+
+// Charger les contours des départements
+d3.json("{% static 'meteo_app/geo/departements.geojson' %}")
+    .then(geojson => {
+
+        // Conserver uniquement la métropole et la Corse
+        const departements = geojson.features.filter(d => {
+            const code = String(d.properties.code || "");
+            return !code.startsWith("97");
+        });
+
+
+        geometrieFrance = {
+            type: "FeatureCollection",
+            features: departements
+        };
+
+
+        // Recalculer l'ombrage si le relief est déjà chargé
+        if (reliefFrance) {
+            dessinerRelief();
+        }
+
+
+
+        fondCarte.selectAll("path")
+            .data(departements)
+            .join("path")
+            .attr("d", cheminGeo)
+            .attr("fill", "#20313c")
+            .attr("stroke", "#48606d")
+            .attr("stroke-width", 0.45)
+            .attr("stroke-opacity", 0.65);
+
+        contoursThermiques.selectAll("path")
+            .data(departements)
+            .join("path")
+            .attr("d", cheminGeo)
+            .attr("fill", "none")
+            .attr("stroke", "#172530")
+            .attr("stroke-width", 0.45)
+            .attr("stroke-opacity", 0.35)
+            .attr("pointer-events", "none");
+
+
+    })
+    .catch(erreur => {
+        console.error("Erreur chargement GeoJSON :", erreur);
+    });
+
+
+
+
+
+const couleurs = d3.scaleLinear()
+    .domain([-10, 0, 5, 10, 15, 20, 25, 30, 40])
+    .range([
+        "#3447A8",
+        "#428ED1",
+        "#58C7CF",
+        "#83C979",
+        "#E5D66D",
+        "#F2AD55",
+        "#ED8145",
+        "#DB493D",
+        "#992C43"
+    ])
+    .clamp(true);
+
+
+const tailleCellule = 4;
+
+// Canvas utilisé pour calculer les couleurs
+// sans créer des milliers d'éléments SVG.
+const canvasThermique = document.createElement("canvas");
+
+canvasThermique.width = largeur;
+canvasThermique.height = hauteur;
+
+const contexteThermique = canvasThermique.getContext("2d");
+
+
+// Canvas indépendant pour l'ombrage du relief
+const canvasRelief = document.createElement("canvas");
+
+canvasRelief.width = largeur;
+canvasRelief.height = hauteur;
+
+const contexteRelief = canvasRelief.getContext("2d");
+
+
+ // Canvas indépendant pour le relief européen
+const canvasEurope = document.createElement("canvas");
+
+canvasEurope.width = largeur;
+canvasEurope.height = hauteur;
+
+const contexteEurope = canvasEurope.getContext("2d");
+
+
+
+
+let geometrieFrance = null;
+
+function masquerHorsFrance() {
+    if (!geometrieFrance) return;
+
+    // Garder uniquement les pixels situés
+    // à l'intérieur du territoire français.
+    contexteThermique.globalCompositeOperation = "destination-in";
+
+    const chemin = d3.geoPath(
+        projection,
+        contexteThermique
+    );
+
+    contexteThermique.beginPath();
+
+    chemin(geometrieFrance);
+
+    contexteThermique.fillStyle = "#ffffff";
+    contexteThermique.fill();
+
+    contexteThermique.globalCompositeOperation = "source-over";
+}
+
+
+// Image qui recevra le résultat du canvas
+// dans notre couche SVG.
+const imageThermique = coucheThermique
+    .append("image")
+    .attr("width", largeur)
+    .attr("height", hauteur)
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("preserveAspectRatio", "none");
+
+
+let stations = [];
+
+let numeroRotationTemperatures = 0;
+
+function selectionnerStationsTemperatures(rotation = numeroRotationTemperatures) {
+    const tailleCase = 100;
+    const cases = new Map();
+
+    const mesures = stations.filter(s =>
+        Number.isFinite(s.temperature) &&
+        Number.isFinite(s.latitude) &&
+        Number.isFinite(s.longitude) &&
+        Number.isFinite(Number(s.altitude)) &&
+        s.altitude !== null &&
+        s.altitude !== "" &&
+        Number(s.altitude) <= 600
+    );
+
+    mesures.forEach(station => {
+        const [x, y] = projection([
+            station.longitude,
+            station.latitude
+        ]);
+
+
+
+        const colonne = Math.floor(x / tailleCase);
+        const ligne = Math.floor(y / tailleCase);
+        const cle = `${colonne}-${ligne}`;
+
+        const centreX = (colonne + 0.5) * tailleCase;
+        const centreY = (ligne + 0.5) * tailleCase;
+
+        const distance = Math.hypot(
+            x - centreX,
+            y - centreY
+        );
+
+        // Préférence pour les stations de plaine,
+        // sans exclure complètement les montagnes.
+        const altitude = Number(station.altitude);
+        const penaliteAltitude =
+            Number.isFinite(altitude) && altitude > 600 ? 30 : 0;
+
+        // Décalage déterministe selon la rotation :
+        // chaque case peut choisir une autre station.
+        const variation = rotation === 0
+            ? 0
+            : 80 * Math.sin(
+                rotation * 2.4 +
+                x * 0.037 +
+                y * 0.053
+            );
+
+        const score = distance + penaliteAltitude + variation;
+
+        const precedente = cases.get(cle);
+
+        if (!precedente || score < precedente.score) {
+            cases.set(cle, {
+                station,
+                score
+            });
+        }
+    });
+
+    // Sélection normale des stations pour cette rotation
+    const selection = Array.from(cases.values(), c => c.station);
+
+    // Extrêmes calculés sur TOUTES les stations éligibles,
+    // indépendamment de la rotation.
+    const temperatureMax = d3.max(mesures, s => s.temperature);
+    const temperatureMin = d3.min(mesures, s => s.temperature);
+
+    // En cas d'égalité, alterner entre les stations concernées.
+    const stationsMax = mesures.filter(s => s.temperature === temperatureMax);
+    const stationsMin = mesures.filter(s => s.temperature === temperatureMin);
+
+    const stationMax = stationsMax[rotation % stationsMax.length];
+    const stationMin = stationsMin[rotation % stationsMin.length];
+
+    // Retirer les stations ordinaires trop proches des extrêmes
+    // pour éviter la superposition des chiffres.
+    const extremes = [stationMax, stationMin].filter(Boolean);
+
+    const selectionFiltree = selection.filter(station => {
+        const [x, y] = projection([station.longitude, station.latitude]);
+
+        return extremes.every(extreme => {
+            const [ex, ey] = projection([extreme.longitude, extreme.latitude]);
+            return Math.hypot(x - ex, y - ey) >= 45;
+        });
+    });
+
+    // Toujours afficher les deux extrêmes, à chaque rotation.
+    return [...selectionFiltree, ...extremes];
+    }
+
+let rotationTemperatures = 0;
+
+let survolTemperature = false;
+
+setInterval(() => {
+    const mode = d3.select("#affichage").property("value");
+    const parametre = d3.select("#parametre").property("value");
+
+    if (
+        mode !== "thermique" ||
+        parametre !== "temperature" ||
+        survolTemperature
+    ) {
+        return;
+    }
+
+    rotationTemperatures = (rotationTemperatures + 1) % 4;
+    dessinerTemperatures();
+
+}, 10000);
+
+const infoBulleTemperature = d3.select("body")
+    .append("div")
+    .attr("class", "info-bulle-temperature")
+    .style("position", "fixed")
+    .style("display", "none")
+    .style("pointer-events", "none")
+    .style("z-index", "1000")
+    .style("padding", "8px 12px")
+    .style("background", "#172530")
+    .style("color", "#ffffff")
+    .style("border", "1px solid #71838e")
+    .style("border-radius", "6px")
+    .style("font-family", "Arial, sans-serif")
+    .style("font-size", "13px")
+    .style("box-shadow", "0 3px 12px rgba(0,0,0,0.3)");
+
+function dessinerTemperatures() {
+    const selection = selectionnerStationsTemperatures(rotationTemperatures);
+
+    // Températures extrêmes parmi les stations affichées
+    const mesuresEligibles = stations.filter(s =>
+        Number.isFinite(s.temperature) &&
+        Number.isFinite(s.latitude) &&
+        Number.isFinite(s.longitude) &&
+        s.altitude !== null &&
+        s.altitude !== "" &&
+        Number.isFinite(Number(s.altitude)) &&
+        Number(s.altitude) <= 600
+    );
+
+    const temperatureMax = d3.max(mesuresEligibles, s => s.temperature);
+    const temperatureMin = d3.min(mesuresEligibles, s => s.temperature);
+
+    console.log(
+        "Température maximale affichée :", temperatureMax,
+        "Température minimale affichée :", temperatureMin
+    );
+
+    // Une seule station pour chaque extrême,
+    // même si plusieurs stations ont la même température.
+    const stationsMax = selection.filter(
+        d => d.temperature === temperatureMax
+    );
+
+    const stationsMin = selection.filter(
+        d => d.temperature === temperatureMin
+    );
+
+    const extremes = [
+        stationsMax[rotationTemperatures % stationsMax.length],
+        stationsMin[rotationTemperatures % stationsMin.length]
+    ].filter((station, index, tableau) =>
+        station && tableau.findIndex(s => s && s.id === station.id) === index
+    );
+
+    coucheTemperatures.selectAll("circle.extreme")
+        .data(extremes, d => d.id)
+        .join("circle")
+        .attr("class", "extreme")
+        .attr("cx", d => projection([d.longitude, d.latitude])[0])
+        .attr("cy", d => projection([d.longitude, d.latitude])[1])
+        .attr("r", 19)
+        .attr("fill", "#ffffff")
+        .attr("stroke", d =>
+            d.temperature === temperatureMax ? "#ff5757" : "#55c8ff"
+        )
+        .attr("stroke-width", 2)
+        .attr("pointer-events", "none");
+
+    coucheTemperatures.selectAll("text")
+        .data(selection, d => d.id)
+        .join("text")
+        .attr("x", d => projection([d.longitude, d.latitude])[0])
+        .attr("y", d => projection([d.longitude, d.latitude])[1])
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "middle")
+        .attr("font-size", 19)
+        .attr("font-weight", "bold")
+        .attr("font-family", "Arial, sans-serif")
+        .attr("fill", d =>
+            d.temperature === temperatureMax ? "#ff5757" :
+            d.temperature === temperatureMin ? "#55c8ff" :
+            "#ffffff"
+        )
+        .attr("stroke", "#172530")
+        .attr("stroke-width", 3.5)
+        .attr("stroke-linejoin", "round")
+        .attr("paint-order", "stroke")
+        .style("cursor", "pointer")
+        .text(d => Math.round(d.temperature))
+        .on("mouseenter", function(event, d) {
+            survolTemperature = true;
+            console.log("Survol :", d.nom);
+            const commune = d.commune || d.nom;
+
+            const humidite = Number.isFinite(d.humidite)
+                ? `${Math.round(d.humidite)} %`
+                : "—";
+
+            const vent = Number.isFinite(d.vent)
+                ? `${Math.round(d.vent * 3.6)} km/h`
+                : "—";
+
+            infoBulleTemperature
+                .html(`
+                    <div style="font-size:16px; font-weight:bold; margin-bottom:4px;">
+                        ${commune}
+                    </div>
+                    <div style="font-size:11px; color:#aab9c4; margin-bottom:10px;">
+                        Station : ${d.nom}
+                    </div>
+                    ${Number.isFinite(d.humidite) ? `
+                        <div style="display:flex; justify-content:space-between; gap:25px; margin-bottom:5px;">
+                            <span>Humidité</span>
+                            <strong>${humidite}</strong>
+                        </div>
+                    ` : ""}
+
+                    ${Number.isFinite(d.vent) ? `
+                        <div style="display:flex; justify-content:space-between; gap:25px;">
+                            <span>Vent</span>
+                            <strong>${vent}</strong>
+                        </div>
+                    ` : ""}
+                `)
+                .style("left", `${event.clientX + 15}px`)
+                .style("top", `${event.clientY - 40}px`)
+                .style("display", "block");
+        })
+        .on("mouseleave", function() {
+            survolTemperature = false;
+
+            infoBulleTemperature
+                .style("display", "none");
+        })
+
+    // Les chiffres doivent toujours être au-dessus
+    // des pastilles, y compris après une rotation.
+    coucheTemperatures.selectAll("text").raise();
+}
+
+function interpolerTemperature(x, y, mesures) {
+    // Recherche des stations les plus proches
+    const voisines = mesures
+        .map(station => {
+            const position = projection([
+                station.longitude,
+                station.latitude
+            ]);
+
+            const dx = position[0] - x;
+            const dy = position[1] - y;
+
+            return {
+                temperature: station.temperature,
+                distance2: dx * dx + dy * dy
+            };
+        })
+        .sort((a, b) => a.distance2 - b.distance2)
+        .slice(0, 8);
+
+    if (voisines.length === 0) {
+        return null;
+    }
+
+    // Si une station se trouve exactement au point calculé
+    if (voisines[0].distance2 < 0.0001) {
+        return voisines[0].temperature;
+    }
+
+    // Moyenne pondérée par l'inverse de la distance au carré
+    let somme = 0;
+    let poidsTotal = 0;
+
+    voisines.forEach(voisine => {
+        const poids = 1 / Math.max(voisine.distance2, 1);
+
+        somme += voisine.temperature * poids;
+        poidsTotal += poids;
+    });
+
+    return somme / poidsTotal;
+}
+
+
+function dessinerCarteThermique() {
+    const mesures = stations.filter(station =>
+        Number.isFinite(station.temperature) &&
+        Number.isFinite(station.latitude) &&
+        Number.isFinite(station.longitude)
+    );
+
+    if (mesures.length === 0) {
+        return;
+    }
+
+    contexteThermique.clearRect(
+        0, 0, largeur, hauteur
+    );
+
+    // Préparer les coordonnées une seule fois
+    // pour accélérer les calculs.
+
+    const positions = mesures.map(station => {
+        const [x, y] = projection([
+            station.longitude,
+            station.latitude
+        ]);
+
+        return {
+            x,
+            y,
+            temperature: station.temperature,
+            altitude: Number.isFinite(station.altitude)
+                ? station.altitude
+                : null
+        };
+    });
+
+
+    for (let y = 0; y < hauteur; y += tailleCellule) {
+        for (let x = 0; x < largeur; x += tailleCellule) {
+
+            const centreX = x + tailleCellule / 2;
+            const centreY = y + tailleCellule / 2;
+
+            const coordonnees = projection.invert([
+                centreX,
+                centreY
+            ]);
+
+            const altitudeCible = altitudeTerrain(
+                coordonnees[0],
+                coordonnees[1]
+            );
+
+
+            // Garder les 8 stations les plus proches
+            const voisines = positions
+                .map(station => {
+                    const dx = station.x - centreX;
+                    const dy = station.y - centreY;
+
+
+                    return {
+                        temperature: station.temperature,
+                        altitude: station.altitude,
+                        distance2: dx * dx + dy * dy
+                    };
+
+                })
+                .sort((a, b) => a.distance2 - b.distance2)
+                .slice(0, 8);
+
+            if (voisines.length === 0) {
+                continue;
+            }
+
+            let valeur;
+
+
+
+            const methodeInterpolation = document.getElementById(
+                "methode-interpolation"
+            ).value;
+
+            const GRADIENT = methodeInterpolation === "relief"
+                ? 0.0045
+                : 0;
+
+
+            if (voisines[0].distance2 < 0.0001) {
+                valeur = voisines[0].temperature;
+            } else {
+                let somme = 0;
+                let totalPoids = 0;
+
+                for (const voisine of voisines) {
+                    const poids = 1 / Math.max(
+                        voisine.distance2, 1
+                    );
+
+                    let temperatureCorrigee = voisine.temperature;
+
+                    if (
+                        Number.isFinite(altitudeCible) &&
+                        Number.isFinite(voisine.altitude)
+                    ) {
+                        temperatureCorrigee -= GRADIENT * (
+                            altitudeCible - voisine.altitude
+                        );
+                    }
+
+                    somme += temperatureCorrigee * poids;
+                    totalPoids += poids;
+                }
+
+                valeur = somme / totalPoids;
+            }
+
+
+            contexteThermique.fillStyle = couleurs(valeur);
+
+            contexteThermique.fillRect(
+                x,
+                y,
+                tailleCellule,
+                tailleCellule
+            );
+        }
+    }
+    masquerHorsFrance();
+
+    imageThermique.attr(
+        "href",
+        canvasThermique.toDataURL("image/png")
+    );
+}
+
+function dessinerPluie() {
+    couchePluie.selectAll("*").remove();
+
+    const stationsPluvieuses = stations.filter(
+        s => Number.isFinite(s.precipitation) &&
+             s.precipitation > 0
+    );
+
+    const intensiteMax = d3.max(
+        stationsPluvieuses,
+        d => d.precipitation
+    ) || 1;
+
+    const taille = d3.scaleSqrt()
+        .domain([0, intensiteMax])
+        .range([8, 30]);
+
+    couchePluie.selectAll("circle")
+        .data(stationsPluvieuses, d => d.id)
+        .join("circle")
+        .attr("cx", d => projection([
+            d.longitude, d.latitude
+        ])[0])
+        .attr("cy", d => projection([
+            d.longitude, d.latitude
+        ])[1])
+        .attr("r", d => taille(d.precipitation))
+        .attr("fill", "#2196f3")
+        .attr("fill-opacity", 0.35)
+        .attr("stroke", "#64c8ff")
+        .attr("stroke-opacity", 0.5)
+        .attr("stroke-width", 0.7);
+}
+
+
+function dessiner(parametre) {
+    const disponibles = stations.filter(
+        station =>
+            station[parametre] !== null &&
+            station[parametre] !== undefined
+    );
+
+    const valeurs = disponibles.map(station => station[parametre]);
+    const domaine = d3.extent(valeurs);
+
+
+
+    const echelle = parametre === "temperature"
+        ? couleurs
+        : d3.scaleSequential(d3.interpolateTurbo)
+            .domain(domaine);
+
+
+
+    groupe.selectAll("circle")
+        .data(disponibles, d => d.id)
+        .join("circle")
+        .attr("class", "station")
+        .attr("cx", d => projection([d.longitude, d.latitude])[0])
+        .attr("cy", d => projection([d.longitude, d.latitude])[1])
+        .attr("r", 3)
+        .attr("fill", d => echelle(d[parametre]))
+        .on("mouseover", function(event, d) {
+            d3.select("#infos").text(
+                `${d.nom} — ${parametre} : ${d[parametre]}`
+            );
+        });
+
+
+    if (parametre === "temperature") {
+        d3.select("#minimum").text("−10 °C");
+        d3.select("#maximum").text("40 °C");
+    } else {
+        d3.select("#minimum").text(
+            domaine[0] !== undefined ? domaine[0] : "—"
+        );
+        d3.select("#maximum").text(
+            domaine[1] !== undefined ? domaine[1] : "—"
+        );
+    }
+
+}
+
+d3.json("{% url 'meteo_app:api_carte' %}")
+    .then(donnees => {
+        stations = donnees.stations;
+
+
+    d3.select("#date-observation").text(
+        donnees.date
+            ? new Date(donnees.date).toLocaleString("fr-FR")
+            : "Aucune observation"
+    );
+
+    d3.select("#infos").text(
+        `${stations.filter(s => s.temperature !== null).length} stations avec température mesurée — Survolez un point pour afficher ses informations.`
+    );
+
+    dessiner("temperature");
+
+    })
+    .catch(erreur => {
+        console.error(erreur);
+        d3.select("#infos").text(
+            "Impossible de charger les observations."
+        );
+    });
+
+d3.select("#parametre").on("change", function() {
+    changerAffichage();
+});
+
+
+let thermiqueCalculee = false;
+
+function changerAffichage() {
+    survolTemperature = false;
+    const mode = d3.select("#affichage").property("value");
+    const parametre = d3.select("#parametre").property("value");
+
+    // Masquer la pluie par défaut
+    couchePluie.style("display", "none");
+
+    // Tableau 2 : précipitations sur le relief
+    if (mode === "thermique" && parametre === "precipitation") {
+        coucheThermique.style("display", "none");
+        coucheRelief.style("display", null);
+        coucheTemperatures.style("display", "none");
+        groupe.style("display", "none");
+        contoursThermiques.style("display", null);
+
+        dessinerRelief(true);
+        dessinerPluie();
+
+        couchePluie.style("display", null);
+
+        d3.select("#infos").text(
+            "Précipitations observées par les stations Météo-France. " +
+            "Les cercles indiquent les stations ayant mesuré de la pluie."
+        );
+
+        d3.select("#minimum").text("0 mm");
+        d3.select("#maximum").text("Pluie");
+
+        return;
+    }
+
+    // Afficher les températures uniquement sur la carte thermique
+    const afficherTemperatures =
+        mode === "thermique" && parametre === "temperature";
+
+    coucheTemperatures.style(
+        "display",
+        afficherTemperatures ? null : "none"
+    );
+
+    if (afficherTemperatures) {
+        dessinerTemperatures();
+    }
+
+
+    if (mode === "relief") {
+        coucheThermique.style("display", "none");
+        coucheRelief.style("display", null);
+        dessinerRelief(true);
+        groupe.style("display", "none");
+        contoursThermiques.style("display", null);
+
+        d3.select("#infos").text(
+            "Relief topographique Copernicus — éclairage simulé depuis le nord-ouest."
+        );
+
+        return;
+    }
+
+
+    if (mode === "thermique" && parametre === "temperature") {
+
+        // Calculer la carte thermique une seule fois
+        if (!thermiqueCalculee) {
+            dessinerCarteThermique();
+            thermiqueCalculee = true;
+        }
+
+        coucheThermique.style("display", null);
+        coucheRelief.style("display", null);
+        groupe.style("display", "none");
+        contoursThermiques.style("display", null);
+        dessinerRelief(false);
+
+        d3.select("#infos").text(
+            "Températures estimées par interpolation des stations Météo-France. Ce ne sont pas des mesures directes."
+        );
+
+    } else {
+
+        coucheThermique.style("display", "none");
+        coucheRelief.style("display", "none");
+        groupe.style("display", null);
+        contoursThermiques.style("display", "none");
+
+        dessiner(parametre);
+    }
+}
+
+d3.select("#affichage").on("change", changerAffichage);
+
+
+d3.select("#methode-interpolation").on("change", function() {
+    thermiqueCalculee = false;
+    changerAffichage();
+});
+
+
+// ---------------------------------------------------------------
+// Adaptation de la carte à la taille de son cadre
+// ---------------------------------------------------------------
+function redimensionnerCarte() {
+    const nouvelleLargeur = Math.round(elementCarte.clientWidth);
+    const nouvelleHauteur = Math.round(elementCarte.clientHeight);
+
+    if (nouvelleLargeur < 50 || nouvelleHauteur < 50) return;
+    if (nouvelleLargeur === largeur && nouvelleHauteur === hauteur) return;
+
+    largeur = nouvelleLargeur;
+    hauteur = nouvelleHauteur;
+
+    // 1. SVG et projection
+    svg.attr("viewBox", `0 0 ${largeur} ${hauteur}`);
+
+    projection
+        .scale(echelleProjection())
+        .translate([largeur / 2, hauteur / 2]);
+
+    // 2. Canvas et images SVG associées
+    [canvasThermique, canvasRelief, canvasEurope].forEach(canvas => {
+        canvas.width = largeur;
+        canvas.height = hauteur;
+    });
+
+    [imageEurope, imageRelief, imageThermique].forEach(image => {
+        image.attr("width", largeur).attr("height", hauteur);
+    });
+
+    // 3. Tracés vectoriels (pays, départements, contours)
+    svg.selectAll("path").attr("d", cheminGeo);
+
+    // 4. Rasters : relief européen, puis le mode d'affichage actif
+    thermiqueCalculee = false;
+    dessinerReliefEurope();
+    changerAffichage();
+}
+
+let minuterieRedimensionnement = null;
+
+new ResizeObserver(() => {
+    clearTimeout(minuterieRedimensionnement);
+    minuterieRedimensionnement = setTimeout(redimensionnerCarte, 300);
+}).observe(elementCarte);
+
+
+</script>
+
+</body>
+</html>

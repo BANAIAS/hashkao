@@ -32,3 +32,8 @@ dist/
 
 # Cache systÃ¨me
 .DS_Store
+
+# Archives meteorologiques locales
+/meteo/data/
+# Données radar et météo locales
+/meteo_app/data/

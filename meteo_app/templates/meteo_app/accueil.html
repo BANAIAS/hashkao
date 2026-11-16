@@ -1,0 +1,325 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aujourd'hui, c'est normal ? — Hashkao</title>
+
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #101b2c;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        main {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 80px 30px;
+        }
+
+        .sur-titre {
+            color: #8fa8c5;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+
+        h1 {
+            font-size: clamp(36px, 6vw, 76px);
+            letter-spacing: -2px;
+            margin: 20px 0;
+        }
+
+        .description {
+            color: #b9c8db;
+            font-size: 18px;
+        }
+
+        .introduction {
+            max-width: 760px;
+            margin-top: 45px;
+        }
+
+        .introduction p {
+            font-size: 18px;
+            line-height: 1.8;
+            color: #b9c8db;
+            margin-bottom: 24px;
+        }
+
+        .introduction strong {
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        .introduction h2 {
+            font-size: clamp(24px, 3vw, 36px);
+            line-height: 1.3;
+            font-weight: 600;
+            margin: 55px 0 30px;
+            color: #ffffff;
+        }
+
+        .resultats {
+            margin-top: 100px;
+            padding-top: 40px;
+            border-top: 1px solid #34465d;
+        }
+
+        .resultats h2 {
+            font-size: clamp(28px, 4vw, 48px);
+            margin: 20px 0 40px;
+        }
+
+        #donnees-meteo {
+            color: #b9c8db;
+            font-size: 18px;
+        }
+
+        .graphique-conteneur {
+            width: 100%;
+            margin-top: 50px;
+        }
+
+        #graphique-temperatures {
+            display: block;
+            width: 100%;
+            height: auto;
+            overflow: visible;
+        }
+
+
+
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+</head>
+
+<body>
+    <main>
+        <p class="sur-titre">
+            Paris-Montsouris · La mémoire du climat parisien
+        </p>
+
+        <h1>Aujourd'hui, est-ce normal ?</h1>
+
+        <section class="introduction">
+
+            <p>
+                Au cœur du <strong>parc Montsouris</strong>,
+                dans le 14ᵉ arrondissement de Paris,
+                se trouve l'une des plus anciennes stations
+                météorologiques de France.
+            </p>
+
+            <p>
+                Depuis <strong>1872</strong>, elle conserve
+                la mémoire des températures parisiennes.
+                Chaque jour, les observations permettent
+                notamment de connaître la température
+                la plus élevée et la plus basse enregistrées.
+            </p>
+
+            <h2>
+                Mais la température d'aujourd'hui
+                est-elle vraiment exceptionnelle ?
+            </h2>
+
+            <p>
+                Nous allons comparer les températures relevées
+                aujourd'hui à celles observées à cette même
+                station, à la même date, au cours des
+                <strong>126 années de notre série historique
+                (1900–2025)</strong>.
+            </p>
+
+            <p>
+                Une façon de découvrir les records,
+                les écarts et la place qu'occupe une journée
+                dans plus d'un siècle d'histoire météorologique.
+            </p>
+
+        </section>
+
+
+        <section class="resultats">
+            <p class="sur-titre">Les archives parlent</p>
+
+            <h2>Le 14 novembre dans l'histoire</h2>
+
+            <div id="donnees-meteo">
+                Chargement des données historiques...
+            </div>
+
+            <div class="graphique-conteneur">
+                <svg
+                    id="graphique-temperatures"
+                    viewBox="0 0 900 400"
+                    role="img"
+                    aria-label="Graphique des températures historiques à Paris-Montsouris">
+                </svg>
+            </div>
+
+        </section>
+
+
+    </main>
+
+
+    <script>
+    async function chargerDonneesMeteo() {
+        const conteneur = document.getElementById("donnees-meteo");
+
+        try {
+            const reponse = await fetch(
+                "/meteo/api/historique/?mois=11&jour=14&mode=chaud"
+            );
+
+            if (!reponse.ok) {
+                throw new Error("Erreur lors du chargement");
+            }
+
+            const donnees = await reponse.json();
+            const record = donnees.top3[0];
+            dessinerGraphique(donnees.observations, donnees.mediane);
+
+            conteneur.innerHTML = `
+                <p>
+                    Médiane historique :
+                    <strong>${donnees.mediane} °C</strong>
+                </p>
+
+                <p>
+                    Record de chaleur :
+                    <strong>${record.TX} °C</strong>
+                    en ${record["Année"]}
+                </p>
+
+                <p>
+                    Années étudiées :
+                    <strong>${donnees.annees_comparees}</strong>
+                </p>
+            `;
+
+        } catch (erreur) {
+            console.error(erreur);
+            conteneur.textContent =
+                "Impossible de charger les données historiques.";
+        }
+    }
+
+    function dessinerGraphique(observations, mediane) {
+
+        const svg = d3.select("#graphique-temperatures");
+
+        // Dimensions du graphique
+        const largeur = 900;
+        const hauteur = 400;
+
+        const marge = {
+            haut: 30,
+            droite: 30,
+            bas: 50,
+            gauche: 50
+        };
+
+        // Effacer un éventuel graphique précédent
+        svg.selectAll("*").remove();
+
+        // Échelle horizontale : les années
+        const x = d3.scaleBand()
+            .domain(observations.map(d => d.annee))
+            .range([marge.gauche, largeur - marge.droite])
+            .padding(0.15);
+
+        // Échelle verticale : les températures
+        const minimum = Math.min(
+            0,
+            d3.min(observations, d => d.temperature)
+        );
+
+        const maximum = Math.max(
+            0,
+            d3.max(observations, d => d.temperature)
+        );
+
+        const y = d3.scaleLinear()
+            .domain([minimum, maximum])
+            .nice()
+            .range([hauteur - marge.bas, marge.haut]);
+
+        // Couleurs selon la température
+        const couleur = d3.scaleLinear()
+            .domain([minimum, maximum])
+            .range(["#4c9fde", "#ffb267"]);
+
+        // Dessiner les barres
+        svg.selectAll(".barre")
+            .data(observations)
+            .join("rect")
+            .attr("class", "barre")
+            .attr("x", d => x(d.annee))
+            .attr("y", d => y(Math.max(0, d.temperature)))
+            .attr("width", x.bandwidth())
+            .attr("height", d =>
+                Math.abs(y(d.temperature) - y(0))
+            )
+            .attr("fill", d => couleur(d.temperature));
+
+
+        // Ligne de la médiane historique
+        svg.append("line")
+            .attr("x1", marge.gauche)
+            .attr("x2", largeur - marge.droite)
+            .attr("y1", y(mediane))
+            .attr("y2", y(mediane))
+            .attr("stroke", "#ffffff")
+            .attr("stroke-width", 1.5)
+            .attr("stroke-dasharray", "6 5")
+            .attr("opacity", 0.8);
+
+        // Étiquette de la médiane
+        svg.append("text")
+            .attr("x", largeur - marge.droite - 5)
+            .attr("y", y(mediane) - 10)
+            .attr("text-anchor", "end")
+            .attr("fill", "#ffffff")
+            .attr("font-size", 13)
+            .text(`Médiane : ${mediane} °C`);
+
+
+        // Axe horizontal
+        svg.append("g")
+            .attr("transform", `translate(0,${hauteur - marge.bas})`)
+            .call(
+                d3.axisBottom(x)
+                    .tickValues(
+                        observations
+                            .filter(d => d.annee % 20 === 0)
+                            .map(d => d.annee)
+                    )
+            );
+
+        // Axe vertical
+        svg.append("g")
+            .attr("transform", `translate(${marge.gauche},0)`)
+            .call(d3.axisLeft(y).ticks(6).tickFormat(d => `${d}°C`));
+
+        // Style des axes
+        svg.selectAll(".domain, .tick line")
+            .attr("stroke", "#52647c");
+
+        svg.selectAll(".tick text")
+            .attr("fill", "#b9c8db")
+            .style("font-size", "12px");
+    }
+
+
+    chargerDonneesMeteo();
+    </script>
+
+</body>
+</html>
