@@ -1,0 +1,126 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#06203f">
+    <title>HKO Météo — la France observée en temps réel</title>
+    <meta name="description" content="Températures, précipitations radar et conditions météo en France, à partir des mesures de Météo-France.">
+    <link rel="stylesheet" href="{% static 'meteo_app/hko/hko.css' %}">
+</head>
+
+<body>
+
+<!-- Séquence d'ouverture : visible pendant le chargement réel du premier tableau -->
+<div id="intro" role="status" aria-live="polite">
+    <svg class="intro-isobares" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <path d="M-50 520 C 180 420, 330 600, 560 470 S 930 300, 1250 420"/>
+        <path d="M-50 430 C 200 330, 360 520, 590 380 S 950 210, 1250 330"/>
+        <path d="M-50 340 C 220 240, 390 430, 620 290 S 970 130, 1250 240"/>
+        <path d="M-50 250 C 240 150, 420 340, 650 200 S 990 50, 1250 150"/>
+        <path d="M-50 610 C 160 510, 300 690, 530 560 S 910 390, 1250 510"/>
+    </svg>
+
+    <div class="intro-centre">
+        <p class="intro-marque" aria-label="HKO Météo">
+            <span class="intro-hko">HKO</span><span class="intro-meteo">Météo</span>
+        </p>
+
+        <div class="intro-jauge" aria-hidden="true">
+            <div class="intro-jauge-trait" id="intro-trait"></div>
+        </div>
+
+        <p class="intro-etape">
+            <span id="intro-etape">Préparation de la carte</span>
+            <span id="intro-pourcent">0 %</span>
+        </p>
+
+        <p class="intro-secours" id="intro-secours" hidden>
+            <span id="intro-message">Le chargement prend plus de temps que prévu.</span>
+            <button type="button" id="intro-passer">Afficher la carte maintenant</button>
+        </p>
+    </div>
+</div>
+
+<main
+    id="scene"
+    data-tableau="temperatures"
+    data-api-carte="{% url 'meteo_app:api_carte' %}"
+    data-api-conditions="{% url 'meteo_app:api_conditions' %}"
+    data-radar="{% url 'meteo_app:fichier_radar' 'radar.json' %}"
+    data-statique="{% get_static_prefix %}meteo_app/"
+>
+    <!-- Carte : fond en relief, champ de températures, radar, tracés -->
+    <canvas id="fond" aria-hidden="true"></canvas>
+    <canvas id="champ" class="couche" aria-hidden="true"></canvas>
+    <canvas id="ciel" class="couche" aria-hidden="true"></canvas>
+    <div id="anim-pluie" class="couche anim" aria-hidden="true"></div>
+    <div id="anim-neige" class="couche anim" aria-hidden="true"></div>
+    <div id="anim-brume" class="couche anim" aria-hidden="true"></div>
+    <img id="radar" class="couche" alt="" aria-hidden="true">
+    <canvas id="hachures" class="couche" aria-hidden="true"></canvas>
+    <svg id="traits" role="img" aria-labelledby="titre-tableau soustitre-tableau">
+        <g id="calque-temperatures" class="couche"></g>
+        <g id="calque-conditions" class="couche"></g>
+    </svg>
+
+    <!-- Habillage -->
+    <header class="entete">
+        <a class="marque" href="{% url 'meteo_app:accueil' %}" aria-label="HKO Météo, accueil">
+            <span class="marque-hko">HKO</span><span class="marque-meteo">Météo</span>
+        </a>
+
+        <div class="jour" role="group" aria-label="Jour consulté">
+            <button type="button" id="jour-precedent" disabled aria-label="Jour précédent">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+            </button>
+            <p id="jour-libelle" aria-live="polite">&nbsp;</p>
+            <button type="button" id="jour-suivant" disabled aria-label="Jour suivant">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+            </button>
+        </div>
+
+        <a class="lien-normal" href="{% url 'meteo_app:est_ce_normal' %}">Est-ce normal ?</a>
+    </header>
+
+    <div id="indisponible" hidden>
+        <p id="indisponible-titre"></p>
+        <p id="indisponible-motif"></p>
+        <button type="button" id="indisponible-action" hidden>Réessayer</button>
+    </div>
+
+    <footer class="pied">
+        <section class="bandeau" id="bandeau">
+            <h1 id="titre-tableau">Températures</h1>
+            <p id="soustitre-tableau">&nbsp;</p>
+            <div id="legende"></div>
+        </section>
+
+        <nav class="tableaux" aria-label="Tableaux météo">
+            <button type="button" data-tableau="temperatures" aria-pressed="true">Températures</button>
+            <button type="button" data-tableau="precipitations" aria-pressed="false">Précipitations</button>
+            <button type="button" data-tableau="conditions" aria-pressed="false">Conditions<span class="suite"> météo</span></button>
+            <button type="button" id="lecture" class="lecture" aria-label="Mettre le défilement en pause">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path class="icone-pause" d="M8 5v14M16 5v14"/>
+                    <path class="icone-lecture" d="M8 5l11 7-11 7z"/>
+                </svg>
+            </button>
+        </nav>
+    </footer>
+
+    <div id="bulle" hidden></div>
+</main>
+
+<noscript>
+    <p style="position:fixed;inset:0;display:grid;place-items:center;background:#06203f;color:#fff;font-family:sans-serif;padding:2rem;text-align:center">
+        HKO Météo a besoin de JavaScript pour dessiner la carte.
+    </p>
+</noscript>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{% static 'meteo_app/hko/hko.js' %}"></script>
+
+</body>
+</html>

@@ -1,0 +1,16 @@
+# HKO Météo — purge quotidienne
+# Activation : sudo systemctl enable --now hko@purger_hko.timer
+
+[Unit]
+Description=HKO Météo — purge quotidienne
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 Europe/Paris
+# Rattrape une exécution manquée (serveur redémarré, par exemple)
+Persistent=true
+# Étale légèrement les appels pour ne pas solliciter les API à la seconde près
+RandomizedDelaySec=20
+Unit=hko@purger_hko.service
+
+[Install]
+WantedBy=timers.target

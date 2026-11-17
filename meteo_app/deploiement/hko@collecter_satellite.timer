@@ -1,0 +1,16 @@
+# HKO Météo — satellite, toutes les 10 minutes
+# Activation : sudo systemctl enable --now hko@collecter_satellite.timer
+
+[Unit]
+Description=HKO Météo — satellite, toutes les 10 minutes
+
+[Timer]
+OnCalendar=*:6/10
+# Rattrape une exécution manquée (serveur redémarré, par exemple)
+Persistent=true
+# Étale légèrement les appels pour ne pas solliciter les API à la seconde près
+RandomizedDelaySec=20
+Unit=hko@collecter_satellite.service
+
+[Install]
+WantedBy=timers.target

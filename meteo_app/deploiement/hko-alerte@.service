@@ -1,0 +1,10 @@
+# HKO Météo — trace une alerte dans le journal système quand une tâche échoue.
+# Consultation : journalctl -t hko-alerte
+# Pour recevoir un courriel, remplacer ExecStart par votre outil d'envoi.
+
+[Unit]
+Description=HKO Météo — alerte sur l'échec de %i
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -t hko-alerte -p user.err "Échec de la tâche HKO %i (journalctl -u hko@%i)"

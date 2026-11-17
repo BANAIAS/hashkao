@@ -1,0 +1,232 @@
+/* ==========================================================================
+   HKO Météo — rubrique « Est-ce normal ? »
+   Reprend les couleurs et la police de hko.css ; ajoute la mise en page
+   éditoriale et les graphiques.
+   ========================================================================== */
+
+.page-normal {
+    --froid-serie: #4a98da;
+    --chaud-serie: #e8603f;
+    --neutre: #8fa1b8;
+    --filet: rgba(255, 255, 255, 0.14);
+
+    height: auto;
+    min-height: 100%;
+    background:
+        radial-gradient(90% 60% at 20% 0%, #0f4380 0%, rgba(15, 67, 128, 0) 70%),
+        var(--nuit);
+    background-attachment: fixed;
+}
+
+html:has(.page-normal) { height: auto; }
+
+.entete-page {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px clamp(18px, 5vw, 64px);
+}
+
+#normal {
+    max-width: 1040px;
+    margin: 0;
+    padding: clamp(24px, 6vw, 70px) clamp(18px, 5vw, 64px) 90px;
+}
+
+.question h1 {
+    margin: 0;
+    font-size: clamp(52px, 10vw, 120px);
+    font-weight: 700;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+}
+
+.chapeau {
+    max-width: 34em;
+    margin: 22px 0 0;
+    color: var(--brume);
+    font-size: clamp(18px, 2vw, 22px);
+    line-height: 1.45;
+}
+
+.reglages {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 28px;
+    margin-top: 34px;
+    padding-top: 18px;
+    border-top: 1px solid var(--filet);
+}
+
+.reglages .jour { margin-left: -10px; }
+.reglages .jour p { min-width: 8.5em; font-size: 20px; }
+
+.bascule {
+    display: inline-flex;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.bascule button {
+    padding: 9px 14px;
+    background: transparent;
+    border: 0;
+    color: var(--brume);
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.bascule button + button { border-left: 1px solid rgba(255, 255, 255, 0.28); }
+.bascule button[aria-pressed="true"] { background: var(--ecume); color: var(--nuit); }
+
+.etat {
+    margin: 46px 0 0;
+    color: var(--brume);
+    font-size: 19px;
+    line-height: 1.5;
+    max-width: 34em;
+}
+
+.etat.erreur { padding-left: 14px; border-left: 4px solid var(--ambre); color: var(--ecume); }
+
+/* Verdict */
+.verdict { margin-top: clamp(34px, 6vw, 60px); }
+
+.verdict-mesure {
+    margin: 0;
+    font-size: clamp(64px, 15vw, 170px);
+    font-weight: 700;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+    font-variant-numeric: lining-nums;
+}
+
+.verdict-mesure small {
+    display: block;
+    margin-top: 0.5em;
+    line-height: 1.2;
+    font-size: clamp(18px, 0.17em, 26px);
+    font-weight: 300;
+    letter-spacing: 0;
+    color: var(--brume);
+}
+
+.verdict-phrase {
+    max-width: 22em;
+    margin: 18px 0 0;
+    font-size: clamp(24px, 3.4vw, 38px);
+    font-weight: 600;
+    line-height: 1.15;
+}
+
+.verdict-note {
+    max-width: 40em;
+    margin: 14px 0 0;
+    color: var(--brume);
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.reperes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0;
+    margin: 34px 0 0;
+    border-top: 1px solid var(--filet);
+}
+
+.reperes div { padding: 14px 16px 14px 0; border-bottom: 1px solid var(--filet); }
+.reperes dt { color: var(--brume); font-size: 15px; }
+.reperes dd { margin: 4px 0 0; font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.reperes dd small { font-size: 15px; font-weight: 400; color: var(--brume); }
+
+/* Figures */
+.figure { margin-top: clamp(54px, 8vw, 88px); }
+
+.figure h2, .methode h2 {
+    margin: 0;
+    max-width: 22em;
+    font-size: clamp(26px, 3.4vw, 36px);
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.legende-figure {
+    max-width: 44em;
+    margin: 10px 0 0;
+    color: var(--brume);
+    font-size: 17px;
+    line-height: 1.5;
+}
+
+.legende-figure .cle {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    margin: 0 5px 0 2px;
+    border-radius: 2px;
+    vertical-align: -1px;
+}
+
+.graphique { margin-top: 18px; }
+.graphique svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.graphique .axe text, .graphique .etiquette {
+    font-family: var(--police);
+    font-size: 13px;
+    fill: var(--brume);
+    font-variant-numeric: tabular-nums;
+}
+
+.graphique .axe line, .graphique .axe path { stroke: var(--filet); }
+.graphique .grille line { stroke: rgba(255, 255, 255, 0.07); }
+.graphique .etiquette.forte { fill: var(--ecume); font-weight: 700; font-size: 14px; }
+.graphique .repere { stroke: var(--ecume); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.graphique .jour-j { stroke: var(--ambre); stroke-width: 2; }
+.graphique .jour-j-point { fill: var(--ambre); stroke: var(--nuit); stroke-width: 2; }
+.graphique .survol { cursor: pointer; }
+
+details { margin-top: 14px; color: var(--brume); font-size: 15px; }
+summary { cursor: pointer; width: fit-content; }
+
+.tableau-donnees {
+    margin-top: 10px;
+    max-height: 300px;
+    overflow: auto;
+    border: 1px solid var(--filet);
+}
+
+.tableau-donnees table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.tableau-donnees th, .tableau-donnees td { padding: 6px 12px; text-align: right; border-bottom: 1px solid var(--filet); }
+.tableau-donnees th { position: sticky; top: 0; background: #0a2a52; color: var(--ecume); }
+.tableau-donnees th:first-child, .tableau-donnees td:first-child { text-align: left; }
+
+.methode {
+    margin-top: clamp(60px, 9vw, 100px);
+    padding-top: 28px;
+    border-top: 1px solid var(--filet);
+}
+
+.methode ul { max-width: 46em; margin: 18px 0 0; padding: 0; list-style: none; }
+.methode li { margin-top: 14px; color: var(--brume); font-size: 17px; line-height: 1.55; }
+.methode strong { color: var(--ecume); }
+
+.bulle-graphique {
+    position: fixed;
+    z-index: 10;
+    padding: 9px 12px 10px;
+    background: rgba(6, 32, 63, 0.97);
+    border-top: 3px solid var(--ambre);
+    box-shadow: 0 10px 30px rgba(0, 10, 30, 0.5);
+    font-size: 14px;
+    line-height: 1.35;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.bulle-graphique[hidden] { display: none; }
+.bulle-graphique b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+.bulle-graphique span { color: var(--brume); }

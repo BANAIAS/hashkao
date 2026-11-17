@@ -1,0 +1,16 @@
+# HKO Météo — AROME, toutes les 30 minutes
+# Activation : sudo systemctl enable --now hko@collecter_arome.timer
+
+[Unit]
+Description=HKO Météo — AROME, toutes les 30 minutes
+
+[Timer]
+OnCalendar=*:20/30
+# Rattrape une exécution manquée (serveur redémarré, par exemple)
+Persistent=true
+# Étale légèrement les appels pour ne pas solliciter les API à la seconde près
+RandomizedDelaySec=20
+Unit=hko@collecter_arome.service
+
+[Install]
+WantedBy=timers.target

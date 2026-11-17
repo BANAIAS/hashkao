@@ -2,9 +2,12 @@
 Convertit une mosaïque radar Météo-France (fichier .h5 déjà téléchargé)
 en image Mercator pour la carte HKO Météo.
 
-    python manage.py convertir_radar meteo_app\data\T_IPRN20_C_LFPW_20261116201000.h5
+    python manage.py convertir_radar meteo_app/data/T_IPRN20_C_LFPW_20261116201000.h5
 
-Écrit radar.png et radar.json dans meteo_app/static/meteo_app/radar/.
+Écrit les images et radar.json dans le dossier de publication
+(HKO_DONNEES/publication/radar/), servi par /meteo/donnees/radar/.
+La collecte automatique (collecter_radar) fait la même chose sans
+intervention ; cette commande reste utile pour un fichier isolé.
 Cette commande ne télécharge rien et n'utilise pas la clé API.
 """
 
@@ -29,7 +32,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Dossier de sortie "
-                "(défaut : meteo_app/static/meteo_app/radar)."
+                "(défaut : HKO_DONNEES/publication/radar)."
             ),
         )
         parser.add_argument(

@@ -1,0 +1,16 @@
+# HKO Météo — surveillance, toutes les 15 minutes
+# Activation : sudo systemctl enable --now hko@etat_hko.timer
+
+[Unit]
+Description=HKO Météo — surveillance, toutes les 15 minutes
+
+[Timer]
+OnCalendar=*:11/15
+# Rattrape une exécution manquée (serveur redémarré, par exemple)
+Persistent=true
+# Étale légèrement les appels pour ne pas solliciter les API à la seconde près
+RandomizedDelaySec=20
+Unit=hko@etat_hko.service
+
+[Install]
+WantedBy=timers.target

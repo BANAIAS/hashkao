@@ -55,9 +55,52 @@ class Command(BaseCommand):
             default=None,
             help="Date UTC au format AAAA-MM-JJTHH:MM:SSZ"
         )
+        self.add_arguments_fusion(parser)
+
+
+    def add_arguments_fusion(self, parser):
+        parser.add_argument(
+            "--sans-fusion",
+            action="store_true",
+            help="Ne pas relancer la fusion des conditions après la collecte."
+        )
 
 
     def handle(self, *args, **options):
+        """
+        Collecte encadrée par un verrou (pas deux collectes à la fois) et
+        consignée dans le journal de surveillance. Puis la fusion des
+        conditions est relancée si de nouvelles observations sont arrivées.
+        """
+        from django.core.management import call_command
+
+        from meteo_app.sources.commun import DejaEnCours, journal, verrou
+
+        self.creees = 0
+
+        try:
+            with verrou("stations", duree_max_secondes=600):
+                with journal("stations", self.stdout) as suivi:
+                    self.collecter(options)
+                    if self.creees:
+                        suivi.succes(
+                            f"{self.creees} observations créées, {self.ignorees} ignorées "
+                            f"(créneau {self.date_api})",
+                            creees=self.creees, ignorees=self.ignorees,
+                        )
+                    else:
+                        suivi.rien_de_neuf(
+                            f"Créneau {self.date_api} déjà en base ({self.ignorees} lignes ignorées)."
+                        )
+        except DejaEnCours as erreur:
+            self.stdout.write(str(erreur))
+            return
+
+        if self.creees and not options.get("sans_fusion"):
+            call_command("fusionner_conditions", stdout=self.stdout, stderr=self.stderr)
+
+
+    def collecter(self, options):
         cle = lire_cle_api()
 
 
@@ -127,6 +170,17 @@ class Command(BaseCommand):
             delimiter=";"
         )
 
+        # Colonnes utiles à l'état du ciel : on signale celles que
+        # le flux fournit réellement, pour savoir ce que la carte
+        # « Conditions météo » pourra afficher.
+        colonnes = observations.fieldnames or []
+        colonnes_ciel = ["vv", "n", "insolh", "ray_glo01", "sss"]
+
+        self.stdout.write(
+            "Colonnes d'état du ciel présentes : "
+            + (", ".join(c for c in colonnes_ciel if c in colonnes) or "aucune")
+        )
+
         stations = {
             station.identifiant: station
             for station in StationMeteo.objects.all()
@@ -160,6 +214,12 @@ class Command(BaseCommand):
                         "rafale_vent": nombre(ligne.get("raf10")),
                         "precipitation": nombre(ligne.get("rr_per")),
                         "pression": pression_hpa(ligne.get("pres")),
+                        # État du ciel (colonnes facultatives du flux)
+                        "visibilite": nombre(ligne.get("vv")),
+                        "nebulosite": nombre(ligne.get("n")),
+                        "insolation": nombre(ligne.get("insolh")),
+                        "rayonnement": nombre(ligne.get("ray_glo01")),
+                        "hauteur_neige": nombre(ligne.get("sss")),
                     }
                 )
 
@@ -167,6 +227,10 @@ class Command(BaseCommand):
                     creees += 1
                 else:
                     ignorees += 1
+
+        self.creees = creees
+        self.ignorees = ignorees
+        self.date_api = date_api
 
         self.stdout.write(
             self.style.SUCCESS(

@@ -1,0 +1,45 @@
+{
+  "image": "radar.png",
+  "couverture": "radar_couverture.png",
+  "projection": "mercator",
+  "emprise": [
+    -9.97,
+    37.45,
+    17.57,
+    54.19
+  ],
+  "largeur": 2000,
+  "hauteur": 1764,
+  "date_utc": "2026-11-17T14:55:00Z",
+  "debut_utc": "2026-11-17T14:50:00Z",
+  "fin_utc": "2026-11-17T14:55:00Z",
+  "periode_minutes": 5.0,
+  "quantite": "ACRR",
+  "unite": "mm/h",
+  "seuils": [
+    0.2,
+    0.5,
+    1,
+    2,
+    4,
+    7,
+    12,
+    20,
+    35,
+    60
+  ],
+  "couleurs": [
+    "#a5d8f3",
+    "#6fb7ea",
+    "#3f8fd8",
+    "#2a63c0",
+    "#3aa655",
+    "#9fce3f",
+    "#f3e03b",
+    "#f4a12a",
+    "#e8502a",
+    "#b3207a"
+  ],
+  "source": "T_IPRN20_C_LFPW_20261117145500.h5",
+  "ecart_coins_m": 0.0
+}

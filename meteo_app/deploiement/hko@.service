@@ -1,0 +1,21 @@
+# HKO Météo — exécution d'une commande Django (modèle d'unité systemd).
+# %i est le nom de la commande : hko@collecter_radar.service, etc.
+#
+# À adapter : User, WorkingDirectory, chemin de l'environnement virtuel,
+# fichier de variables (clés d'API). Voir ../AUTOMATISATION.md.
+
+[Unit]
+Description=HKO Météo — %i
+After=network-online.target
+Wants=network-online.target
+OnFailure=hko-alerte@%i.service
+
+[Service]
+Type=oneshot
+User=hashkao
+WorkingDirectory=/srv/hashkao
+EnvironmentFile=/srv/hashkao/.env
+ExecStart=/srv/hashkao/.venv/bin/python manage.py %i
+# Une collecte bloquée ne doit jamais empêcher la suivante
+TimeoutStartSec=25min
+Nice=10

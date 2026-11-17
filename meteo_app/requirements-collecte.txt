@@ -1,0 +1,14 @@
+# Dépendances de la collecte HKO Météo (radar, satellite, AROME).
+# Le site lui-même n'en a pas besoin : seules les commandes de collecte
+# et de fusion les importent.
+#
+#   pip install -r meteo_app/requirements-collecte.txt
+#
+h5py>=3.10        # mosaïques radar ODIM_H5 et masque nuageux netCDF4
+pyproj>=3.6       # projections stéréographique et géostationnaire
+Pillow>=10.0      # images radar, GeoTIFF AROME, masques géographiques
+numpy>=1.26
+scipy>=1.11       # plus proches stations (déjà dans requirements.txt)
+eumdac>=4.0       # EUMETSAT Data Store (masque nuageux MTG)
+# Facultatif : lecture plus robuste des GeoTIFF compressés d'AROME
+# tifffile>=2024.1

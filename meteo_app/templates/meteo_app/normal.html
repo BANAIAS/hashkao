@@ -1,0 +1,122 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#06203f">
+    <title>Est-ce normal ? — HKO Météo</title>
+    <meta name="description" content="La température du jour à Paris replacée dans plus d'un siècle de mesures à la station de Paris-Montsouris.">
+    <link rel="stylesheet" href="{% static 'meteo_app/hko/hko.css' %}">
+    <link rel="stylesheet" href="{% static 'meteo_app/hko/normal.css' %}">
+</head>
+
+<body class="page-normal">
+
+<header class="entete-page">
+    <a class="marque" href="{% url 'meteo_app:accueil' %}" aria-label="HKO Météo, retour à la carte">
+        <span class="marque-hko">HKO</span><span class="marque-meteo">Météo</span>
+    </a>
+    <a class="lien-normal" href="{% url 'meteo_app:accueil' %}">Voir la carte</a>
+</header>
+
+<main id="normal" data-api="{% url 'meteo_app:api_normal' %}">
+
+    <section class="question">
+        <h1>Est-ce normal ?</h1>
+        <p class="chapeau">
+            La température du jour à Paris, replacée dans plus d'un siècle
+            de mesures à la station du parc Montsouris.
+        </p>
+
+        <div class="reglages">
+            <div class="jour" role="group" aria-label="Jour étudié">
+                <button type="button" id="n-precedent" aria-label="Jour précédent">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                </button>
+                <p id="n-jour" aria-live="polite">&nbsp;</p>
+                <button type="button" id="n-suivant" aria-label="Jour suivant">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+                </button>
+            </div>
+
+            <div class="bascule" role="group" aria-label="Température étudiée">
+                <button type="button" data-mode="chaud" aria-pressed="true">Au plus chaud de la journée</button>
+                <button type="button" data-mode="froid" aria-pressed="false">Au plus froid</button>
+            </div>
+        </div>
+    </section>
+
+    <p id="n-etat" class="etat" role="status">Lecture des archives…</p>
+
+    <div id="n-contenu" hidden>
+
+        <section class="verdict" aria-live="polite">
+            <p class="verdict-mesure" id="n-mesure"></p>
+            <p class="verdict-phrase" id="n-phrase"></p>
+            <p class="verdict-note" id="n-note"></p>
+
+            <dl class="reperes" id="n-reperes"></dl>
+        </section>
+
+        <section class="figure">
+            <h2 id="n-titre-annees"></h2>
+            <p class="legende-figure" id="n-legende-annees"></p>
+            <div class="graphique" id="g-annees"></div>
+            <details>
+                <summary>Voir les valeurs année par année</summary>
+                <div class="tableau-donnees" id="n-tableau"></div>
+            </details>
+        </section>
+
+        <section class="figure">
+            <h2 id="n-titre-repartition"></h2>
+            <p class="legende-figure">
+                Chaque point est une année. Plus la pile est haute, plus cette
+                température est fréquente à cette date.
+            </p>
+            <div class="graphique" id="g-repartition"></div>
+        </section>
+
+        <section class="figure">
+            <h2>Une journée ne fait pas le climat</h2>
+            <p class="legende-figure" id="n-legende-climat"></p>
+            <div class="graphique" id="g-decennies"></div>
+        </section>
+
+        <section class="methode">
+            <h2>Comment lire ces chiffres</h2>
+            <ul>
+                <li>
+                    <strong>La série.</strong> Températures quotidiennes de la station
+                    Météo-France de Paris-Montsouris, <span id="n-periode"></span>.
+                    Seules les valeurs validées par Météo-France sont retenues.
+                </li>
+                <li>
+                    <strong>La normale.</strong> Moyenne des années 1991 à 2020, calculée
+                    sur les quinze jours qui entourent la date. C'est la référence
+                    climatique en vigueur ; elle évite de dépendre du hasard d'un seul jour.
+                </li>
+                <li>
+                    <strong>La mesure du jour.</strong> Plus haute et plus basse valeur
+                    relevées de minuit à minuit, toutes les six minutes. Les archives
+                    utilisent une convention un peu différente (de 6 h à 6 h pour la
+                    maximale) : les deux valeurs peuvent donc légèrement différer.
+                </li>
+                <li>
+                    <strong>Météo ou climat ?</strong> Un jour plus chaud ou plus froid
+                    que la normale relève de la météo : cela arrive chaque année. Le
+                    climat se lit sur des moyennes de plusieurs décennies.
+                </li>
+            </ul>
+        </section>
+    </div>
+</main>
+
+<div id="n-bulle" class="bulle-graphique" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{% static 'meteo_app/hko/normal.js' %}"></script>
+
+</body>
+</html>
