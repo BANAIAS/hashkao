@@ -1,17 +1,26 @@
 /* ==========================================================================
-   HKO Météo — expérience principale (trois tableaux)
+   HKO Météo — expérience principale (quatre tableaux)
+
+   Chaque tableau a son propre fond et sa propre logique graphique :
+
+     Températures    relief bleuté, quadrillage, zones de températures
+     Précipitations  fond sombre, radar animé
+     Conditions      aplats de couleurs, pictogrammes
+     Satellite       vue de la Terre (Blue Marble), nuages observés animés
 
    Organisation du fichier :
      1. État et réglages
      2. Ouverture : chargement réel et jauge
      3. Cadrage (projection D3)
-     4. Fond de carte : mer, relief teinté, frontières
-     5. Tableau 1 — températures (champ interpolé + valeurs)
-     6. Tableau 2 — radar de précipitations
-     7. Tableau 3 — conditions météo (symboles animés)
-     8. Habillage : bandeau, légendes, bulle, états indisponibles
-     9. Navigation : tableaux, défilement automatique, jours
-    10. Démarrage
+     4. Fonds de carte (un par tableau, dessinés à la demande)
+     5. Tableau 1 — températures
+     6. Tableau 2 — précipitations (radar)
+     7. Tableau 3 — conditions météo (pictogrammes)
+     8. Tableau 4 — satellite
+     9. Lecture des animations (frise temporelle)
+    10. Habillage : bandeau, légendes, bulle, états indisponibles
+    11. Navigation : tableaux, défilement automatique, jours
+    12. Démarrage
    ========================================================================== */
 
 (() => {
@@ -25,9 +34,11 @@ const scene = document.getElementById("scene");
 const $ = id => document.getElementById(id);
 
 const URL_API = scene.dataset.apiCarte;
+const URL_CONDITIONS = scene.dataset.apiConditions;
+const URL_ANIMATION = scene.dataset.apiAnimation;
 const STATIQUE = scene.dataset.statique;
 
-const TABLEAUX = ["temperatures", "precipitations", "conditions"];
+const TABLEAUX = ["satellite", "temperatures", "precipitations", "conditions"];
 const DUREE_TABLEAU = 15000;        // défilement automatique
 const REPRISE_AUTO = 60000;         // après un choix manuel
 const RAFRAICHISSEMENT = 6 * 60000; // nouvelles observations du jour
@@ -38,26 +49,55 @@ const CADRE_FRANCE = {
     coordinates: [[-5.25, 41.3], [9.7, 51.15]]
 };
 
+// Emprise des images de fond (Mercator), voir preparer_fonds_cartes.py
+const FOND_EMPRISE = { ouest: -16, sud: 34, est: 22, nord: 60 };
+
 // Gradient thermique vertical utilisé pour l'interpolation (°C par mètre)
 const GRADIENT_ALTITUDE = 0.0045;
 
 // Stations d'altitude écartées des valeurs affichées (peu représentatives)
 const ALTITUDE_MAX_AFFICHEE = 600;
 
-// Couleurs des températures (°C -> couleur)
+// Couleurs des températures (°C -> couleur). Échelle absolue : la carte
+// passe d'elle-même des bleus de l'hiver aux orangés de l'été.
 const PALETTE_TEMPERATURE = [
-    [-15, "#3d1a78"], [-10, "#4a2c9a"], [-5, "#2c55b3"], [0, "#3c8fd9"],
-    [5, "#86c7ea"], [10, "#dcecdf"], [14, "#f6e7a1"], [18, "#f9c85a"],
-    [23, "#f3923b"], [28, "#e2532d"], [34, "#b01f2e"], [42, "#6a0f2b"]
+    [-15, "#3d1a78"], [-10, "#4b3aa8"], [-5, "#3b6fd0"], [0, "#5aa9e6"],
+    [4, "#8fd3ec"], [8, "#c8ead0"], [11, "#eaf0a6"], [14, "#f6dd78"],
+    [18, "#f7c252"], [23, "#f39b3a"], [28, "#e8662d"], [33, "#c8352a"],
+    [38, "#9b1730"], [44, "#5e0b2a"]
 ];
 
-// Teintes du relief (altitude en mètres -> couleur)
-const PALETTE_RELIEF = [
-    [0, "#6f9c58"], [120, "#83a85d"], [300, "#a3b56a"], [600, "#c4b877"],
-    [1000, "#c2a06c"], [1500, "#a98763"], [2000, "#a39a92"],
-    [2500, "#d9d6d1"], [3000, "#ffffff"]
+// Fonds en relief : couleurs du sol selon l'altitude, de la mer selon la
+// profondeur (0 abysses, 1 plateau continental), force de l'ombrage.
+const STYLES_RELIEF = {
+    temperatures: {
+        terre: [[0, "#90b3d2"], [300, "#9fbedb"], [800, "#b3cbe3"], [1500, "#cddcee"],
+                [2500, "#e7f0f9"], [3500, "#fbfdff"]],
+        sansRelief: [144, 179, 210],
+        mer: [[0, "#0b2f63"], [0.6, "#14457f"], [1, "#2a6aaa"]],
+        ombre: 1.7, ombreMin: 0.45, ombreMax: 1.38,
+        vignette: 0.32
+    },
+    precipitations: {
+        terre: [[0, "#262a30"], [500, "#2d3138"], [1500, "#3d424a"], [3000, "#5b6069"]],
+        sansRelief: [38, 42, 48],
+        mer: [[0, "#080d15"], [0.7, "#0d1622"], [1, "#132233"]],
+        ombre: 1.5, ombreMin: 0.5, ombreMax: 1.55,
+        vignette: 0.4
+    }
+};
+
+// Villes repères du radar (longitude, latitude)
+const VILLES = [
+    ["Paris", 2.35, 48.86], ["Lyon", 4.84, 45.76], ["Marseille", 5.37, 43.3],
+    ["Bordeaux", -0.58, 44.84], ["Toulouse", 1.44, 43.6], ["Nantes", -1.55, 47.22],
+    ["Lille", 3.06, 50.63], ["Strasbourg", 7.75, 48.58], ["Rennes", -1.68, 48.11],
+    ["Brest", -4.49, 48.39], ["Nice", 7.26, 43.7], ["Montpellier", 3.88, 43.61],
+    ["Limoges", 1.26, 45.83], ["Clermont-Ferrand", 3.08, 45.78], ["Dijon", 5.04, 47.32],
+    ["Rouen", 1.1, 49.44], ["Tours", 0.69, 47.39], ["Ajaccio", 8.74, 41.93],
+    ["Perpignan", 2.9, 42.7], ["Reims", 4.03, 49.26], ["La Rochelle", -1.15, 46.16],
+    ["Grenoble", 5.72, 45.19], ["Caen", -0.37, 49.18], ["Metz", 6.18, 49.12]
 ];
-const TERRE_SANS_RELIEF = [132, 166, 96];
 
 const etat = {
     largeur: 0,
@@ -67,19 +107,28 @@ const etat = {
     pays: null,
     departements: null,
     relief: null,
+    bathymetrie: null,   // image (Mercator) de la profondeur des mers
+    imageSatellite: null,
     altitudes: null,     // altitude par pixel du fond
-    ombres: null,        // facteur d'ombrage par pixel du fond
+    lumiere: null,       // éclairage du relief par pixel (0,7 = terrain plat)
+    ombres: null,        // facteur d'ombrage appliqué sous les températures
+    masqueTerres: null,  // canvas : terres en noir
+    fondsAJour: new Set(),
     jours: new Map(),    // réponses de l'API par jour
     donnees: null,       // réponse du jour affiché
     jour: null,
-    tableau: "temperatures",
+    tableau: "satellite",
     auto: true,
     rotation: 0,
-    radar: undefined,    // undefined : pas encore demandé ; null : absent
-    conditions: new Map(), // cartes fusionnées par jour
+    radar: undefined,    // image radar publiée ; undefined : pas encore demandée
     radarImage: null,
     radarCouverture: null,
+    conditions: new Map(), // cartes fusionnées par jour
     conditionsPretes: false,
+    nuitConditions: false,
+    animations: { radar: new Map(), satellite: new Map() },   // séquences par jour
+    rendus: { radar: undefined, satellite: undefined },
+    pasBande: 2,
     ouverte: false
 };
 
@@ -131,6 +180,16 @@ function decalerJour(jour, pas) {
     return new Date(Date.UTC(a, m - 1, j + pas)).toISOString().slice(0, 10);
 }
 
+function lissage(a, b, x) {
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+}
+
+function rgb(hex) {
+    const c = d3.rgb(hex);
+    return [c.r, c.g, c.b];
+}
+
 // ---------------------------------------------------------------------------
 // 2. Ouverture : chargement réel et jauge
 // ---------------------------------------------------------------------------
@@ -139,9 +198,10 @@ function decalerJour(jour, pas) {
 const etapes = {
     pays:         { poids: 8,  part: 0, nom: "Contours de l'Europe" },
     departements: { poids: 12, part: 0, nom: "Contours de la France" },
-    relief:       { poids: 28, part: 0, nom: "Relief" },
+    relief:       { poids: 26, part: 0, nom: "Relief" },
+    bathymetrie:  { poids: 4,  part: 0, nom: "Fonds marins" },
     observations: { poids: 20, part: 0, nom: "Observations Météo-France" },
-    fond:         { poids: 16, part: 0, nom: "Dessin de la carte" },
+    fond:         { poids: 14, part: 0, nom: "Dessin de la carte" },
     champ:        { poids: 16, part: 0, nom: "Carte des températures" }
 };
 
@@ -238,6 +298,16 @@ async function chargerRessource(cle, allege, origine) {
     return json;
 }
 
+function chargerImage(url) {
+    return new Promise((resoudre, rejeter) => {
+        const image = new Image();
+        image.decoding = "async";
+        image.onload = () => resoudre(image);
+        image.onerror = () => rejeter(new Error(`Image illisible : ${url}`));
+        image.src = url;
+    });
+}
+
 function normaliserRelief(source) {
     // Accepte le format allégé (tableau à plat) et le format d'origine (lignes).
     const { largeur, hauteur } = source;
@@ -277,6 +347,10 @@ function fermerIntro() {
 // 3. Cadrage
 // ---------------------------------------------------------------------------
 
+const CANVAS_2D = ["fond-temperatures", "fond-precipitations", "fond-conditions",
+                   "fond-satellite", "champ", "hachures"];
+const CANVAS_GL = ["gl-radar", "gl-satellite"];
+
 function cadrer() {
     const cadre = scene.getBoundingClientRect();
 
@@ -287,7 +361,7 @@ function cadrer() {
     const etroit = etat.largeur < 760;
     const haut = etroit ? 104 : 74;
     const bas = etroit
-        ? Math.min(250, etat.hauteur * 0.36)
+        ? Math.min(270, etat.hauteur * 0.38)
         : Math.min(150, etat.hauteur * 0.2);
     const cote = etroit ? 8 : Math.min(60, etat.largeur * 0.04);
 
@@ -301,13 +375,19 @@ function cadrer() {
     const budget = Math.sqrt(2.6e6 / (etat.largeur * etat.hauteur));
     etat.echelle = Math.max(1, Math.min(dpr, 2, budget));
 
-    for (const id of ["fond", "champ", "hachures"]) {
+    for (const id of [...CANVAS_2D, ...CANVAS_GL]) {
         const canvas = $(id);
         canvas.width = Math.round(etat.largeur * etat.echelle);
         canvas.height = Math.round(etat.hauteur * etat.echelle);
     }
 
     d3.select("#traits").attr("viewBox", `0 0 ${etat.largeur} ${etat.hauteur}`);
+
+    etat.fondsAJour.clear();
+    etat.altitudes = null;
+    etat.profondeurs = null;
+    etat.masqueTerres = null;
+    cheminFrance = null;
 }
 
 // Largeur de la France à l'écran : sert d'unité pour les tailles de texte.
@@ -317,7 +397,11 @@ function largeurFrance() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Fond de carte
+// 4. Fonds de carte
+//
+// Les quatre fonds sont des canvas superposés ; seul celui du tableau
+// affiché est visible. Chacun est dessiné la première fois qu'on en a
+// besoin, puis après un changement de taille.
 // ---------------------------------------------------------------------------
 
 function tableCouleurs(palette, debut, fin, pas) {
@@ -340,8 +424,9 @@ function tableCouleurs(palette, debut, fin, pas) {
     return { table, debut, pas, taille };
 }
 
-let teintesRelief = null;
 let teintesTemperature = null;
+const teintesRelief = {};
+const teintesMer = {};
 
 function tracerSurCanvas(contexte, geometrie) {
     const chemin = d3.geoPath(etat.projection, contexte);
@@ -349,55 +434,65 @@ function tracerSurCanvas(contexte, geometrie) {
     chemin(geometrie);
 }
 
-function dessinerFond() {
-    const canvas = $("fond");
-    const W = canvas.width, H = canvas.height, k = etat.echelle;
-    const ctx = canvas.getContext("2d");
-    const projection = etat.projection;
+function nouveauCanvas(W, H) {
+    const c = document.createElement("canvas");
+    c.width = W;
+    c.height = H;
+    return c;
+}
 
-    // --- Mer : dégradé du large vers les côtes ---------------------------
-    const centre = projection([2.5, 46.6]);
-    const mer = ctx.createRadialGradient(
-        centre[0] * k, centre[1] * k, 0,
-        centre[0] * k, centre[1] * k, Math.hypot(W, H) * 0.62
-    );
-    mer.addColorStop(0, "#2a78c2");
-    mer.addColorStop(0.45, "#1a5fa6");
-    mer.addColorStop(1, "#0b3468");
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = mer;
-    ctx.fillRect(0, 0, W, H);
-
-    const terres = {
+function terres() {
+    return {
         type: "FeatureCollection",
         features: [...etat.pays.features, ...etat.departements.features]
     };
+}
 
-    // --- Halo clair le long des côtes -------------------------------------
-    ctx.save();
-    ctx.setTransform(k, 0, 0, k, 0, 0);
-    ctx.shadowColor = "rgba(150, 210, 255, 0.55)";
-    ctx.shadowBlur = 16 * k;
-    ctx.fillStyle = "#2a78c2";
-    tracerSurCanvas(ctx, terres);
-    ctx.fill();
-    ctx.restore();
+// Masque des terres à la taille des canvas ; le trait referme les joints
+function masqueTerres() {
+    if (etat.masqueTerres) return etat.masqueTerres;
+    const W = $("champ").width, H = $("champ").height, k = etat.echelle;
+    const masque = nouveauCanvas(W, H);
+    const cm = masque.getContext("2d");
+    cm.setTransform(k, 0, 0, k, 0, 0);
+    tracerSurCanvas(cm, terres());
+    cm.fillStyle = "#000";
+    cm.fill();
+    cm.lineWidth = 0.8;
+    cm.strokeStyle = "#000";
+    cm.stroke();
+    etat.masqueTerres = masque;
+    return masque;
+}
 
-    // --- Relief teinté et ombré -------------------------------------------
+// Rectangle (en pixels de canvas) où poser une image de fond Mercator
+function cadreImageFond() {
+    const k = etat.echelle;
+    const [x0, y0] = etat.projection([FOND_EMPRISE.ouest, FOND_EMPRISE.nord]);
+    const [x1, y1] = etat.projection([FOND_EMPRISE.est, FOND_EMPRISE.sud]);
+    return [x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k];
+}
+
+// Altitude et éclairage par pixel, communs aux fonds en relief
+function preparerRelief() {
+    if (etat.altitudes) return;
+
+    const W = $("champ").width, H = $("champ").height, k = etat.echelle;
+    const projection = etat.projection;
     const relief = etat.relief;
+
     const longitudes = new Float64Array(W);
     const latitudes = new Float64Array(H);
-
     for (let x = 0; x < W; x++) longitudes[x] = projection.invert([(x + 0.5) / k, 0])[0];
     for (let y = 0; y < H; y++) latitudes[y] = projection.invert([0, (y + 0.5) / k])[1];
 
     const altitudes = new Float32Array(W * H).fill(NaN);
+    const lumiere = new Float32Array(W * H).fill(0.7071);
+    const fondu = new Float32Array(W * H).fill(0);
 
     if (relief) {
         const { largeur: gl, hauteur: gh, resolution: res, altitudes: grille } = relief;
 
-        // Position de chaque colonne dans la grille de relief (calculée une fois)
         const gx0 = new Int32Array(W), fx = new Float32Array(W);
         for (let x = 0; x < W; x++) {
             const g = (longitudes[x] - relief.ouest) * res - 0.5;
@@ -432,33 +527,24 @@ function dessinerFond() {
                 altitudes[ligne + x] = haut + (bas - haut) * fy;
             }
         }
-    }
 
-    // Ombrage : lumière venant du nord-ouest, relief accentué pour rester
-    // lisible à cette échelle.
-    const ombres = new Float32Array(W * H).fill(1);
-    const image = ctx.createImageData(W, H);
-    const pixels = image.data;
-
-    // Aux limites des données de relief, le modelé s'estompe vers l'aplat
-    // au lieu de s'arrêter net.
-    const fonduX = new Float32Array(W).fill(1), fonduY = new Float32Array(H).fill(1);
-    if (relief) {
-        const marge = 1.2;   // degrés
-        for (let x = 0; x < W; x++) {
-            fonduX[x] = Math.max(0, Math.min(1,
-                (longitudes[x] - relief.ouest) / marge, (relief.est - longitudes[x]) / marge));
-        }
+        // Aux limites des données de relief, le modelé s'estompe
+        const marge = 1.2;
         for (let y = 0; y < H; y++) {
-            fonduY[y] = Math.max(0, Math.min(1,
+            const fy = Math.max(0, Math.min(1,
                 (latitudes[y] - relief.sud) / marge, (relief.nord - latitudes[y]) / marge));
+            for (let x = 0; x < W; x++) {
+                const fx2 = Math.max(0, Math.min(1,
+                    (longitudes[x] - relief.ouest) / marge, (relief.est - longitudes[x]) / marge));
+                fondu[y * W + x] = fx2 < fy ? fx2 : fy;
+            }
         }
     }
 
+    // Éclairage : lumière du nord-ouest, relief accentué pour rester lisible
     const degresParPixel = longitudes[1] - longitudes[0];
     const accent = 7;
-    const lx = -0.5, ly = 0.5, lz = 0.7071;   // azimut 315°, hauteur 45°
-    const { table, pas: pasTeinte, taille: nTeintes } = teintesRelief;
+    const lx = -0.5, ly = 0.5, lz = 0.7071;
 
     for (let y = 0; y < H; y++) {
         const metresX = 111320 * Math.cos(latitudes[y] * Math.PI / 180) * degresParPixel;
@@ -468,15 +554,7 @@ function dessinerFond() {
         for (let x = 0; x < W; x++) {
             const i = y * W + x;
             const z = altitudes[i];
-            const p = i * 4;
-
-            if (z !== z) {
-                pixels[p] = TERRE_SANS_RELIEF[0];
-                pixels[p + 1] = TERRE_SANS_RELIEF[1];
-                pixels[p + 2] = TERRE_SANS_RELIEF[2];
-                pixels[p + 3] = 255;
-                continue;
-            }
+            if (z !== z) continue;
 
             const xg = x > 0 ? x - 1 : x, xd = x < W - 1 ? x + 1 : x;
             let zg = altitudes[y * W + xg], zd = altitudes[y * W + xd];
@@ -489,83 +567,326 @@ function dessinerFond() {
             const penteEst = accent * (zd - zg) / (metresX * Math.max(1, xd - xg));
             const penteNord = accent * (zh - zb) / (metresY * Math.max(1, yb - yh));
 
-            const lumiere = (-penteEst * lx - penteNord * ly + lz) /
+            const l = (-penteEst * lx - penteNord * ly + lz) /
                 Math.sqrt(penteEst * penteEst + penteNord * penteNord + 1);
-
-            let facteur = 1 + (lumiere - 0.7071) * 1.25;
-            facteur = facteur < 0.5 ? 0.5 : facteur > 1.32 ? 1.32 : facteur;
-            ombres[i] = facteur;
-
-            let t = Math.round((z < 0 ? 0 : z) / pasTeinte);
-            if (t >= nTeintes) t = nTeintes - 1;
-            t *= 3;
-
-            const f = fonduX[x] < fonduY[y] ? fonduX[x] : fonduY[y];
-            const r = TERRE_SANS_RELIEF[0] + (table[t] * facteur - TERRE_SANS_RELIEF[0]) * f;
-            const g = TERRE_SANS_RELIEF[1] + (table[t + 1] * facteur - TERRE_SANS_RELIEF[1]) * f;
-            const b = TERRE_SANS_RELIEF[2] + (table[t + 2] * facteur - TERRE_SANS_RELIEF[2]) * f;
-            pixels[p] = r > 255 ? 255 : r;
-            pixels[p + 1] = g > 255 ? 255 : g;
-            pixels[p + 2] = b > 255 ? 255 : b;
-            pixels[p + 3] = 255;
+            // Hors des données de relief : terrain plat
+            lumiere[i] = 0.7071 + (l - 0.7071) * fondu[i];
         }
     }
 
+    // Ombrage sous les températures (même modelé que le fond bleuté)
+    const ombres = new Float32Array(W * H);
+    for (let i = 0; i < ombres.length; i++) {
+        const f = 1 + (lumiere[i] - 0.7071) * 1.25;
+        ombres[i] = f < 0.5 ? 0.5 : f > 1.32 ? 1.32 : f;
+    }
+
     etat.altitudes = altitudes;
+    etat.lumiere = lumiere;
     etat.ombres = ombres;
+    etat.fonduRelief = fondu;
+}
 
-    // Les terres : l'image du relief découpée selon les côtes
-    const calque = document.createElement("canvas");
-    calque.width = W;
-    calque.height = H;
+// Profondeur des mers (0 abysses .. 1 plateau ; -1 sur terre) par pixel
+function profondeurs() {
+    if (etat.profondeurs) return etat.profondeurs;
+    const W = $("champ").width, H = $("champ").height;
+    const resultat = new Float32Array(W * H).fill(0.55);
+
+    if (etat.bathymetrie) {
+        const c = nouveauCanvas(W, H);
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.fillStyle = "rgb(110,110,110)";   // au-delà de l'image : profondeur moyenne
+        ctx.fillRect(0, 0, W, H);
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(etat.bathymetrie, ...cadreImageFond());
+        const px = ctx.getImageData(0, 0, W, H).data;
+        for (let i = 0; i < resultat.length; i++) {
+            const v = px[i * 4];
+            resultat[i] = v === 0 ? 0.9 : (v - 1) / 254;   // 0 : terre dans l'image
+        }
+    }
+    etat.profondeurs = resultat;
+    return resultat;
+}
+
+// Fond en relief (températures, précipitations) : mer, puis terres ombrées
+function peindreRelief(canvas, nom) {
+    preparerRelief();
+    const style = STYLES_RELIEF[nom];
+    const W = canvas.width, H = canvas.height, k = etat.echelle;
+    const ctx = canvas.getContext("2d");
+
+    if (!teintesRelief[nom]) {
+        teintesRelief[nom] = tableCouleurs(style.terre, 0, 4000, 10);
+        teintesMer[nom] = tableCouleurs(style.mer, 0, 1, 0.005);
+    }
+    const terre = teintesRelief[nom], mer = teintesMer[nom];
+
+    const altitudes = etat.altitudes, lumiere = etat.lumiere;
+    const prof = profondeurs();
+    const image = ctx.createImageData(W, H);
+    const px = image.data;
+    const cx = W * 0.55, cy = H * 0.45, rayon = Math.hypot(W, H) * 0.62;
+
+    // La mer, d'abord partout
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const i = y * W + x, p = i * 4;
+            let t = Math.round(prof[i] / mer.pas);
+            t = (t < 0 ? 0 : t >= mer.taille ? mer.taille - 1 : t) * 3;
+            const v = 1 - style.vignette * Math.min(1, Math.hypot(x - cx, y - cy) / rayon) ** 2;
+            px[p] = mer.table[t] * v;
+            px[p + 1] = mer.table[t + 1] * v;
+            px[p + 2] = mer.table[t + 2] * v;
+            px[p + 3] = 255;
+        }
+    }
+    ctx.putImageData(image, 0, 0);
+
+    // Puis les terres, ombrées, découpées selon les côtes
+    const terres2 = ctx.createImageData(W, H);
+    const pt = terres2.data;
+    const [r0, g0, b0] = style.sansRelief;
+
+    for (let i = 0; i < W * H; i++) {
+        const p = i * 4;
+        const z = altitudes[i];
+        let r = r0, g = g0, b = b0;
+
+        if (z === z) {
+            let t = Math.round((z < 0 ? 0 : z) / terre.pas);
+            if (t >= terre.taille) t = terre.taille - 1;
+            t *= 3;
+            r = terre.table[t]; g = terre.table[t + 1]; b = terre.table[t + 2];
+        }
+        let f = 1 + (lumiere[i] - 0.7071) * style.ombre;
+        f = f < style.ombreMin ? style.ombreMin : f > style.ombreMax ? style.ombreMax : f;
+        r *= f; g *= f; b *= f;
+        pt[p] = r > 255 ? 255 : r;
+        pt[p + 1] = g > 255 ? 255 : g;
+        pt[p + 2] = b > 255 ? 255 : b;
+        pt[p + 3] = 255;
+    }
+
+    const calque = nouveauCanvas(W, H);
     const c2 = calque.getContext("2d");
-
-    // Masque des terres ; le trait referme les joints entre pays voisins
-    const masque = document.createElement("canvas");
-    masque.width = W;
-    masque.height = H;
-    const cm = masque.getContext("2d");
-    cm.setTransform(k, 0, 0, k, 0, 0);
-    tracerSurCanvas(cm, terres);
-    cm.fillStyle = "#000";
-    cm.fill();
-    cm.lineWidth = 0.8;
-    cm.strokeStyle = "#000";
-    cm.stroke();
-
-    c2.putImageData(image, 0, 0);
+    c2.putImageData(terres2, 0, 0);
     c2.globalCompositeOperation = "destination-in";
-    c2.drawImage(masque, 0, 0);
+    c2.drawImage(masqueTerres(), 0, 0);
 
-    ctx.drawImage(calque, 0, 0);
-
-    // --- Frontières et trait de côte --------------------------------------
+    // Halo le long des côtes
     ctx.save();
     ctx.setTransform(k, 0, 0, k, 0, 0);
-    ctx.lineJoin = "round";
-
-    tracerSurCanvas(ctx, { type: "FeatureCollection", features: etat.pays.features });
-    ctx.lineWidth = 0.7;
-    ctx.strokeStyle = "rgba(20, 45, 30, 0.38)";
-    ctx.stroke();
+    ctx.shadowColor = nom === "temperatures" ? "rgba(150, 205, 255, 0.5)" : "rgba(90, 120, 150, 0.35)";
+    ctx.shadowBlur = (nom === "temperatures" ? 14 : 9) * k;
+    ctx.fillStyle = nom === "temperatures" ? "#2a6aaa" : "#141c26";
+    tracerSurCanvas(ctx, terres());
+    ctx.fill();
     ctx.restore();
 
-    // Contour de la France : on trace tous les départements, puis on efface
-    // l'intérieur ; il ne reste que le liseré extérieur.
-    c2.setTransform(1, 0, 0, 1, 0, 0);
-    c2.globalCompositeOperation = "source-over";
-    c2.clearRect(0, 0, W, H);
+    ctx.drawImage(calque, 0, 0);
+}
+
+// Contour extérieur de la France : on trace tous les départements, puis on
+// efface l'intérieur ; il ne reste que le liseré.
+function lisereFrance(ctx, largeur, couleur) {
+    const W = ctx.canvas.width, H = ctx.canvas.height, k = etat.echelle;
+    const calque = nouveauCanvas(W, H);
+    const c2 = calque.getContext("2d");
     c2.setTransform(k, 0, 0, k, 0, 0);
     tracerSurCanvas(c2, etat.departements);
     c2.lineJoin = "round";
-    c2.lineWidth = 2.6;
-    c2.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    c2.lineWidth = largeur;
+    c2.strokeStyle = couleur;
     c2.stroke();
     c2.globalCompositeOperation = "destination-out";
     c2.fillStyle = "#000";
     c2.fill();
-
     ctx.drawImage(calque, 0, 0);
+}
+
+function frontieres(ctx, epaisseur, couleur) {
+    ctx.save();
+    ctx.setTransform(etat.echelle, 0, 0, etat.echelle, 0, 0);
+    ctx.lineJoin = "round";
+    tracerSurCanvas(ctx, { type: "FeatureCollection", features: etat.pays.features });
+    ctx.lineWidth = epaisseur;
+    ctx.strokeStyle = couleur;
+    ctx.stroke();
+    ctx.restore();
+}
+
+// Quadrillage géographique (parallèles et méridiens), comme à l'antenne
+function quadrillage(ctx) {
+    const k = etat.echelle, p = etat.projection;
+    const [lonMin, latMax] = p.invert([0, 0]);
+    const [lonMax, latMin] = p.invert([etat.largeur, etat.hauteur]);
+
+    ctx.save();
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.lineWidth = 0.8;
+    ctx.strokeStyle = "rgba(225, 240, 255, 0.22)";
+    ctx.beginPath();
+    for (let lon = Math.ceil(lonMin); lon <= lonMax; lon++) {
+        const x = Math.round(p([lon, 0])[0]) + 0.5;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, etat.hauteur);
+    }
+    for (let lat = Math.ceil(latMin); lat <= latMax; lat++) {
+        const y = Math.round(p([0, lat])[1]) + 0.5;
+        ctx.moveTo(0, y);
+        ctx.lineTo(etat.largeur, y);
+    }
+    ctx.stroke();
+
+    // Graduations : latitudes à gauche, longitudes en haut, tous les 2°
+    const corps = Math.max(10, Math.min(13, etat.largeur / 110));
+    ctx.font = `600 ${corps}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.fillStyle = "rgba(225, 240, 255, 0.62)";
+    ctx.textBaseline = "bottom";
+    const gauche = etat.largeur < 760 ? 6 : Math.min(60, etat.largeur * 0.04) + 4;
+    for (let lat = Math.ceil(latMin); lat <= latMax; lat++) {
+        if (lat % 2) continue;
+        const y = p([0, lat])[1];
+        if (y < 90 || y > etat.hauteur - 40) continue;
+        ctx.fillText(`${lat}°`, gauche, y - 3);
+    }
+    const haut = etat.largeur < 760 ? 112 : 84;
+    for (let lon = Math.ceil(lonMin); lon <= lonMax; lon++) {
+        if (lon % 2) continue;
+        const x = p([lon, 0])[0];
+        if (x < 40 || x > etat.largeur - 40) continue;
+        ctx.fillText(lon === 0 ? "0°" : lon < 0 ? `${-lon}° O` : `${lon}° E`, x + 4, haut);
+    }
+    ctx.restore();
+}
+
+function dessinerFondTemperatures() {
+    const canvas = $("fond-temperatures");
+    peindreRelief(canvas, "temperatures");
+    const ctx = canvas.getContext("2d");
+    quadrillage(ctx);
+    frontieres(ctx, 0.8, "rgba(255, 255, 255, 0.5)");
+    lisereFrance(ctx, 2.4, "rgba(255, 255, 255, 0.9)");
+}
+
+function dessinerFondPrecipitations() {
+    const canvas = $("fond-precipitations");
+    peindreRelief(canvas, "precipitations");
+    const ctx = canvas.getContext("2d");
+
+    // Départements, très discrets : repères pour situer la pluie
+    ctx.save();
+    ctx.setTransform(etat.echelle, 0, 0, etat.echelle, 0, 0);
+    tracerSurCanvas(ctx, etat.departements);
+    ctx.lineWidth = 0.5;
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.11)";
+    ctx.stroke();
+    ctx.restore();
+
+    frontieres(ctx, 0.9, "rgba(255, 255, 255, 0.55)");
+    lisereFrance(ctx, 1.4, "rgba(255, 255, 255, 0.78)");
+}
+
+// Aplats : jour (vert franc sur mer bleue) ou nuit (mêmes teintes, assombries)
+const APLATS = {
+    jour: {
+        merCentre: "#3fa6e6", merBord: "#1462b0", voisins: "#7cb6e2", voisinsBord: "rgba(255,255,255,0.45)",
+        franceHaut: "#a9d64c", franceBas: "#87bd35", departements: "rgba(52, 96, 18, 0.32)",
+        lisere: "rgba(255, 255, 255, 0.95)", halo: "rgba(255, 255, 255, 0.5)"
+    },
+    nuit: {
+        merCentre: "#163f78", merBord: "#081c3d", voisins: "#24466f", voisinsBord: "rgba(255,255,255,0.22)",
+        franceHaut: "#4e7d2e", franceBas: "#3a6522", departements: "rgba(0, 0, 0, 0.28)",
+        lisere: "rgba(255, 255, 255, 0.7)", halo: "rgba(140, 190, 255, 0.35)"
+    }
+};
+
+function dessinerFondConditions() {
+    const canvas = $("fond-conditions");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height, k = etat.echelle;
+    const a = APLATS[etat.nuitConditions ? "nuit" : "jour"];
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const centre = etat.projection([2.5, 46.6]);
+    const mer = ctx.createRadialGradient(centre[0] * k, centre[1] * k, 0,
+        centre[0] * k, centre[1] * k, Math.hypot(W, H) * 0.6);
+    mer.addColorStop(0, a.merCentre);
+    mer.addColorStop(1, a.merBord);
+    ctx.fillStyle = mer;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+
+    // Pays voisins : un ton à peine plus clair que la mer
+    tracerSurCanvas(ctx, { type: "FeatureCollection", features: etat.pays.features });
+    ctx.fillStyle = a.voisins;
+    ctx.fill();
+    ctx.lineWidth = 0.8;
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = a.voisinsBord;
+    ctx.stroke();
+
+    // France : aplat franc avec une légère profondeur
+    const [, yHaut] = etat.projection([2, 51.1]);
+    const [, yBas] = etat.projection([2, 42.3]);
+    const vert = ctx.createLinearGradient(0, yHaut, 0, yBas);
+    vert.addColorStop(0, a.franceHaut);
+    vert.addColorStop(1, a.franceBas);
+
+    ctx.save();
+    ctx.shadowColor = a.halo;
+    ctx.shadowBlur = 18;
+    tracerSurCanvas(ctx, etat.departements);
+    ctx.fillStyle = vert;
+    ctx.fill();
+    ctx.restore();
+
+    tracerSurCanvas(ctx, etat.departements);
+    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = a.departements;
+    ctx.stroke();
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    lisereFrance(ctx, 2.2, a.lisere);
+}
+
+function dessinerFondSatellite() {
+    const canvas = $("fond-satellite");
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#02091a";
+    ctx.fillRect(0, 0, W, H);
+
+    if (!etat.imageSatellite) return false;
+
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(etat.imageSatellite, ...cadreImageFond());
+
+    // Léger assombrissement des bords : la France reste au centre du regard
+    const v = ctx.createRadialGradient(W * 0.52, H * 0.45, Math.min(W, H) * 0.25, W * 0.52, H * 0.45, Math.hypot(W, H) * 0.62);
+    v.addColorStop(0, "rgba(0, 4, 14, 0)");
+    v.addColorStop(1, "rgba(0, 4, 14, 0.45)");
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, W, H);
+    return true;
+}
+
+const DESSINS_FOND = {
+    temperatures: dessinerFondTemperatures,
+    precipitations: dessinerFondPrecipitations,
+    conditions: dessinerFondConditions,
+    satellite: dessinerFondSatellite
+};
+
+function assurerFond(tableau) {
+    if (etat.fondsAJour.has(tableau) || !etat.pays) return;
+    const fait = DESSINS_FOND[tableau]();
+    if (fait !== false) etat.fondsAJour.add(tableau);
 }
 
 // ---------------------------------------------------------------------------
@@ -585,10 +906,12 @@ function stationsValides() {
 // Interpolation par l'inverse de la distance sur les 8 stations les plus
 // proches, avec correction d'altitude. Les stations sont rangées dans une
 // grille de cases pour ne comparer chaque point qu'à ses voisines.
+// Le résultat est une estimation entre les stations, pas une mesure.
 function calculerChamp(stations, pas) {
+    preparerRelief();
     const projection = etat.projection;
     const k = etat.echelle;
-    const W = $("fond").width, H = $("fond").height;
+    const W = $("champ").width, H = $("champ").height;
 
     const points = stations.map(s => {
         const p = projection([s.longitude, s.latitude]);
@@ -702,6 +1025,14 @@ function calculerChamp(stations, pas) {
     return { valeurs, colonnes, lignes, x0, y0, pas };
 }
 
+// Pas des zones de couleur : plus fin quand les écarts du jour sont faibles
+function pasDesZones(valeurs) {
+    const v = Array.from(valeurs).filter(Number.isFinite).sort((a, b) => a - b);
+    if (v.length < 10) return 2;
+    const etendue = v[Math.floor(v.length * 0.95)] - v[Math.floor(v.length * 0.05)];
+    return etendue <= 7 ? 1 : etendue <= 16 ? 2 : 3;
+}
+
 function dessinerChamp() {
     const canvas = $("champ");
     const ctx = canvas.getContext("2d");
@@ -717,6 +1048,8 @@ function dessinerChamp() {
     if (!champ) return;
 
     const { valeurs, colonnes, lignes, x0, y0, pas } = champ;
+    const pasBande = pasDesZones(valeurs);
+    etat.pasBande = pasBande;
 
     const gx0 = Math.round(x0 * k), gy0 = Math.round(y0 * k);
     const gl = Math.min(W - gx0, Math.round((colonnes - 1) * pas * k));
@@ -728,6 +1061,22 @@ function dessinerChamp() {
     const pixels = image.data;
     const { table, debut, pas: pasT, taille } = teintesTemperature;
     const ombres = etat.ombres;
+
+    // Couleur d'une zone : celle de son milieu
+    const couleurZone = n => {
+        let i = Math.round(((n + 0.5) * pasBande - debut) / pasT);
+        i = (i < 0 ? 0 : i >= taille ? taille - 1 : i) * 3;
+        return [table[i], table[i + 1], table[i + 2]];
+    };
+    const zones = new Map();
+    const zone = n => {
+        let c = zones.get(n);
+        if (!c) zones.set(n, c = couleurZone(n));
+        return c;
+    };
+
+    // Transition entre deux zones : un pixel ou deux, adoucie
+    const bord = 0.07;
 
     for (let y = 0; y < gh; y++) {
         const fy0 = (y / k) / pas;
@@ -746,18 +1095,30 @@ function dessinerChamp() {
 
             if (t !== t) continue;
 
-            let n = Math.round((t - debut) / pasT);
-            n = n < 0 ? 0 : n >= taille ? taille - 1 : n;
-            n *= 3;
+            const b = t / pasBande;
+            const n = Math.floor(b);
+            const f = b - n;
+            let c = zone(n), r = c[0], g = c[1], bl = c[2];
+
+            if (f < bord || f > 1 - bord) {
+                const voisine = f < bord ? zone(n - 1) : zone(n + 1);
+                const m = f < bord ? 0.5 - f / (2 * bord) : 0.5 - (1 - f) / (2 * bord);
+                r += (voisine[0] - r) * m;
+                g += (voisine[1] - g) * m;
+                bl += (voisine[2] - bl) * m;
+                // Léger liseré sombre entre deux zones
+                const l = 1 - 0.07 * (1 - Math.min(f, 1 - f) / bord);
+                r *= l; g *= l; bl *= l;
+            }
 
             // Le relief reste lisible sous la couleur : même ombrage que le fond
             const ombre = ombres ? 0.25 + 0.75 * ombres[(gy0 + y) * W + gx0 + x] : 1;
             const p = (y * gl + x) * 4;
 
-            const r = table[n] * ombre, g = table[n + 1] * ombre, b = table[n + 2] * ombre;
+            r *= ombre; g *= ombre; bl *= ombre;
             pixels[p] = r > 255 ? 255 : r;
             pixels[p + 1] = g > 255 ? 255 : g;
-            pixels[p + 2] = b > 255 ? 255 : b;
+            pixels[p + 2] = bl > 255 ? 255 : bl;
             pixels[p + 3] = 255;
         }
     }
@@ -771,6 +1132,10 @@ function dessinerChamp() {
     ctx.fillStyle = "#000";
     ctx.fill();
     ctx.globalCompositeOperation = "source-over";
+
+    // Liseré blanc par-dessus les couleurs
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    lisereFrance(ctx, 2.4, "rgba(255, 255, 255, 0.92)");
 }
 
 // Une valeur par case d'une grille régulière : la station la plus proche du
@@ -818,6 +1183,7 @@ function choisirParCases(stations, tailleCase, rotation, cleGroupe) {
     return choix;
 }
 
+// Relevés à l'antenne : un point carré à la station, le chiffre à côté
 function placerTemperatures() {
     const calque = d3.select("#calque-temperatures");
     const stations = stationsValides().filter(s =>
@@ -832,8 +1198,8 @@ function placerTemperatures() {
     }
 
     const unite = largeurFrance();
-    const tailleCase = Math.max(54, unite / 7.2);
-    const corps = Math.max(15, Math.min(30, unite / 26));
+    const tailleCase = Math.max(56, unite / 7);
+    const corps = Math.max(17, Math.min(34, unite / 22));
 
     let choix = choisirParCases(stations, tailleCase, etat.rotation);
 
@@ -847,50 +1213,59 @@ function placerTemperatures() {
         return { station, x, y };
     });
 
-    choix = choix.filter(c =>
-        extremes.every(e => e.station.id === c.station.id ||
-            Math.hypot(c.x - e.x, c.y - e.y) >= corps * 2)
-    );
-
     for (const extreme of extremes) {
         if (!choix.some(c => c.station.id === extreme.station.id)) choix.push(extreme);
     }
 
-    // Écarter les valeurs qui se chevaucheraient
+    // Emprise d'un relevé : le point et le chiffre à sa droite
+    const emprise = d => {
+        const largeurTexte = corps * 0.58 * String(Math.round(d.station.temperature)).length;
+        return [d.x - corps * 0.3, d.y - corps * 0.85, d.x + corps * 0.55 + largeurTexte, d.y + corps * 0.35];
+    };
+    const chevauche = (a, b) => !(a[2] + 4 < b[0] || b[2] + 4 < a[0] || a[3] + 3 < b[1] || b[3] + 3 < a[1]);
+
+    // Écarter les relevés qui se chevaucheraient (les extrêmes d'abord)
     const places = [];
-    for (const c of choix.sort((a, b) =>
-        (b.station.id === mini.id || b.station.id === maxi.id) -
-        (a.station.id === mini.id || a.station.id === maxi.id))) {
-        if (places.every(p => Math.hypot(p.x - c.x, p.y - c.y) >= corps * 1.7)) places.push(c);
+    const prioritaire = d => d.station.id === mini.id || d.station.id === maxi.id;
+    for (const c of choix.sort((a, b) => prioritaire(b) - prioritaire(a))) {
+        const e = emprise(c);
+        if (places.every(p => !chevauche(p.e, e))) places.push({ ...c, e });
     }
 
-    calque.selectAll("text")
+    const point = Math.max(6, corps * 0.32);
+
+    calque.selectAll("g.releve")
         .data(places, d => d.station.id)
-        .join("text")
+        .join(entree => {
+            const g = entree.append("g").attr("tabindex", 0);
+            g.append("rect").attr("class", "releve-point");
+            g.append("text").attr("class", "temp");
+            return g;
+        })
         .attr("class", d =>
-            "temp" + (d.station.id === mini.id ? " mini" : d.station.id === maxi.id ? " maxi" : ""))
-        .attr("x", d => d.x)
-        .attr("y", d => d.y)
-        .attr("font-size", corps)
-        .attr("stroke-width", corps * 0.2)
-        .attr("tabindex", 0)
-        .text(d => Math.round(d.station.temperature))
+            "releve" + (d.station.id === mini.id ? " mini" : d.station.id === maxi.id ? " maxi" : ""))
+        .attr("transform", d => `translate(${d.x},${d.y})`)
+        .call(g => g.select("rect")
+            .attr("x", -point / 2).attr("y", -point / 2)
+            .attr("width", point).attr("height", point))
+        .call(g => g.select("text")
+            .attr("x", point * 0.75)
+            .attr("y", -corps * 0.22)
+            .attr("font-size", corps)
+            .attr("stroke-width", corps * 0.2)
+            .text(d => Math.round(d.station.temperature)))
         .on("pointerenter focus", (evenement, d) => montrerBulle(d, bulleTemperature(d.station)))
         .on("pointerleave blur", cacherBulle);
 }
 
 // ---------------------------------------------------------------------------
-// 6. Tableau 2 — radar
+// 6. Tableau 2 — précipitations
+//
+// Animation : grilles radar archivées (0,05°, toutes les 5 minutes), avec
+// images intermédiaires calculées. Dernière image du jour : l'image radar
+// publiée en pleine résolution (1 km), fondue par-dessus si elle correspond
+// à la dernière grille.
 // ---------------------------------------------------------------------------
-
-function chargerImage(url) {
-    return new Promise((resoudre, rejeter) => {
-        const image = new Image();
-        image.onload = () => resoudre(image);
-        image.onerror = () => rejeter(new Error(`Image illisible : ${url}`));
-        image.src = url;
-    });
-}
 
 async function chargerRadar() {
     // Fichiers publiés par collecter_radar ; à défaut, l'ancien emplacement
@@ -947,6 +1322,18 @@ function radarDuJour() {
     );
 }
 
+// Seuils et couleurs : ceux de l'image publiée, sinon ceux de radar.py
+const SEUILS_RADAR = [0.2, 0.5, 1, 2, 4, 7, 12, 20, 35, 60];
+const COULEURS_RADAR = ["#a5d8f3", "#6fb7ea", "#3f8fd8", "#2a63c0", "#3aa655",
+                        "#9fce3f", "#f3e03b", "#f4a12a", "#e8502a", "#b3207a"];
+
+function paletteRadar() {
+    const r = etat.radar;
+    const seuils = r && r.seuils && r.seuils.length === 10 ? r.seuils : SEUILS_RADAR;
+    const couleurs = r && r.couleurs && r.couleurs.length === 10 ? r.couleurs : COULEURS_RADAR;
+    return { seuils, couleurs };
+}
+
 function placerRadar() {
     const image = $("radar");
     const hachures = $("hachures");
@@ -979,7 +1366,7 @@ function placerRadar() {
     const pas = Math.round(7 * k);
     motif.width = motif.height = pas;
     const m = motif.getContext("2d");
-    m.strokeStyle = "rgba(255, 255, 255, 0.34)";
+    m.strokeStyle = "rgba(255, 255, 255, 0.3)";
     m.lineWidth = Math.max(1, k * 0.9);
     m.beginPath();
     m.moveTo(-1, pas + 1); m.lineTo(pas + 1, -1);
@@ -996,18 +1383,40 @@ function placerRadar() {
     ctx.globalCompositeOperation = "source-over";
 }
 
+// Villes repères, au-dessus de la pluie
+function placerVilles() {
+    const unite = largeurFrance();
+    const corps = Math.max(10, Math.min(13.5, unite / 48));
+    const retenues = [];
+    for (const [nom, lon, lat] of VILLES) {
+        const [x, y] = etat.projection([lon, lat]);
+        if (x < 20 || y < 80 || x > etat.largeur - 20 || y > etat.hauteur - 30) continue;
+        // Sur petit écran, on garde les villes les plus espacées
+        if (retenues.some(v => Math.hypot(v.x - x, v.y - y) < corps * 6)) continue;
+        retenues.push({ nom, x, y });
+    }
+
+    d3.select("#calque-radar").selectAll("g.ville")
+        .data(retenues, d => d.nom)
+        .join(entree => {
+            const g = entree.append("g").attr("class", "ville");
+            g.append("circle").attr("r", 2.2);
+            g.append("text").attr("x", 5).attr("y", -4);
+            return g;
+        })
+        .attr("transform", d => `translate(${d.x},${d.y})`)
+        .call(g => g.select("text").attr("font-size", corps).text(d => d.nom.toUpperCase()));
+}
+
 // ---------------------------------------------------------------------------
 // 7. Tableau 3 — conditions météo
 //
 // Source : la carte fusionnée calculée sur le serveur (fusionner_conditions),
 // qui croise radar, satellite, stations et AROME sur une grille de 0,05°.
-// Le navigateur ne décide d'aucun phénomène : il met en images ce que la
-// grille contient (catégorie, nébulosité, intensité, vent, confiance).
-// Faute de carte fusionnée, l'ancien rendu par stations sert de repli.
+// Le navigateur ne décide d'aucun phénomène : il choisit la situation
+// dominante autour de chaque emplacement et la dessine. Pas de texture de
+// nuages ici : la vue satellite a son propre tableau.
 // ---------------------------------------------------------------------------
-
-const NUAGE = "M-13 8a7 7 0 0 1-1-13.9a10 10 0 0 1 19-2.6a8.3 8.3 0 0 1 8.5 16.5z";
-const LUNE = "M3.5-10.5a10.5 10.5 0 1 0 8.6 15.6a8.6 8.6 0 0 1-8.6-15.6z";
 
 // Libellés : [de jour, de nuit]
 const LIBELLES_CONDITION = {
@@ -1049,55 +1458,133 @@ const SOURCES_CONDITION = {
     "rayonnement": "rayonnement solaire mesuré"
 };
 
-const URL_CONDITIONS = scene.dataset.apiConditions;
+// --- Pictogrammes ------------------------------------------------------------
+
+// Silhouette de nuage : enveloppe de trois lobes, base plate
+function silhouetteNuage(lobes, base) {
+    const gauche = Math.min(...lobes.map(([x, , r]) => x - r));
+    const droite = Math.max(...lobes.map(([x, , r]) => x + r));
+    const n = 48;
+    let d = "";
+    for (let i = 0; i <= n; i++) {
+        const x = gauche + (droite - gauche) * i / n;
+        let y = base;
+        for (const [cx, cy, r] of lobes) {
+            const dx = x - cx;
+            if (Math.abs(dx) <= r) y = Math.min(y, cy - Math.sqrt(r * r - dx * dx));
+        }
+        d += `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+    // Base arrondie aux deux extrémités
+    return `${d}L${droite.toFixed(2)} ${base}Q${droite.toFixed(2)} ${base + 4} ${(droite - 4).toFixed(2)} ${base + 4}` +
+        `L${(gauche + 4).toFixed(2)} ${base + 4}Q${gauche.toFixed(2)} ${base + 4} ${gauche.toFixed(2)} ${base}Z`;
+}
+
+const NUAGE = silhouetteNuage([[-11, 3, 8.5], [-0.5, -4.5, 11.5], [11.5, 2, 8.5]], 7);
+const LUNE = "M4-13a13 13 0 1 0 10.6 19.2a10.6 10.6 0 0 1-10.6-19.2z";
+const GOUTTE = "M0-4.6C1.9-1.6 3.2 0.4 3.2 2a3.2 3.2 0 0 1-6.4 0c0-1.6 1.3-3.6 3.2-6.6z";
+const ECLAIR = "M2.5 7l-8 11h5l-3 9.5 10.5-13h-5.5l4-7.5z";
+
+function rayonsSoleil(r1, r2) {
+    let d = "";
+    for (let i = 0; i < 12; i++) {
+        const a = i * Math.PI / 6;
+        const l = i % 2 ? r2 * 0.86 : r2;
+        const c = Math.cos(a), s = Math.sin(a);
+        const pc = Math.cos(a + 0.13), ps = Math.sin(a + 0.13);
+        const mc = Math.cos(a - 0.13), ms = Math.sin(a - 0.13);
+        d += `M${(r1 * mc).toFixed(2)} ${(r1 * ms).toFixed(2)}L${(l * c).toFixed(2)} ${(l * s).toFixed(2)}` +
+             `L${(r1 * pc).toFixed(2)} ${(r1 * ps).toFixed(2)}Z`;
+    }
+    return d;
+}
+const RAYONS = rayonsSoleil(13.5, 21);
+
+function astre(jour, echelle = 1, x = 0, y = 0) {
+    const t = `translate(${x},${y}) scale(${echelle})`;
+    if (jour) {
+        return `<g transform="${t}" class="p-astre"><circle r="22" fill="url(#p-halo)"/>` +
+            `<path class="p-rayons" d="${RAYONS}"/>` +
+            `<circle r="12" fill="url(#p-soleil)" class="p-disque"/></g>`;
+    }
+    return `<g transform="${t}" class="p-astre"><path d="${LUNE}" fill="url(#p-lune)" class="p-trait"/>` +
+        `<path class="p-etoile" d="M17-13l1 2.4 2.4 1-2.4 1-1 2.4-1-2.4-2.4-1 2.4-1z"/></g>`;
+}
+
+function nuage(teinte, echelle = 1, x = 0, y = 0) {
+    return `<g transform="translate(${x},${y}) scale(${echelle})" class="p-nuage">` +
+        `<path d="${NUAGE}" transform="translate(0,2.4)" class="p-ombre"/>` +
+        `<path d="${NUAGE}" fill="url(#p-nuage-${teinte})" class="p-trait"/></g>`;
+}
+
+function gouttes(n, y = 15) {
+    const ecart = n > 3 ? 6 : 8;
+    return d3.range(n).map(i => {
+        const x = (i - (n - 1) / 2) * ecart;
+        const dy = (i % 2) * 4;
+        return `<g transform="translate(${x},${y + dy})"><path class="p-goutte" d="${GOUTTE}" style="animation-delay:${(i * 0.37) % 1.1}s"/></g>`;
+    }).join("");
+}
+
+function flocons(n, y = 16) {
+    const branche = "M0-4.2V4.2M-3.6-2.1L3.6 2.1M-3.6 2.1L3.6-2.1";
+    return d3.range(n).map(i => {
+        const x = (i - (n - 1) / 2) * 9;
+        const dy = (i % 2) * 5;
+        return `<g transform="translate(${x},${y + dy})"><path class="p-flocon" d="${branche}" style="animation-delay:${i * 0.8}s"/></g>`;
+    }).join("");
+}
 
 function dessinSymbole(code, jour) {
-    const astre = jour
-        ? `<g class="rayons">${d3.range(8).map(i => {
-              const a = i * Math.PI / 4;
-              return `<line x1="${11.5 * Math.cos(a)}" y1="${11.5 * Math.sin(a)}" x2="${16 * Math.cos(a)}" y2="${16 * Math.sin(a)}"/>`;
-          }).join("")}</g><circle class="astre contour" r="8.2"/>`
-        : `<path class="lune contour" d="${LUNE}"/>`;
-
-    const nuage = (classe = "", transformation = "") =>
-        `<g transform="${transformation}"><path class="nuage contour derive ${classe}" d="${NUAGE}"/></g>`;
-
-    const gouttes = n => d3.range(n).map(i => {
-        const x = n === 1 ? 0 : -7 + i * (14 / (n - 1));
-        return `<line class="goutte" x1="${x + 1.2}" y1="11.5" x2="${x - 1.2}" y2="18"/>`;
-    }).join("");
-
     switch (code) {
         case "soleil":
-            return astre;
+            return astre(jour, 1.12);
         case "peu-nuageux":
-            return `<g transform="translate(-3,-3)">${astre}</g>${nuage("", "translate(8,7) scale(0.55)")}`;
+            return astre(jour, 1, -3, -4) + nuage("blanc", 0.62, 10, 9);
         case "eclaircies":
-            return `<g transform="translate(-6,-6) scale(0.82)">${astre}</g>${nuage("", "translate(3,4) scale(0.92)")}`;
+            return astre(jour, 0.92, -8, -8) + nuage("blanc", 0.95, 4, 5);
         case "nuageux":
-            return nuage("gris", "translate(5,-5) scale(0.78)") + nuage("", "translate(-2,3)");
+            return nuage("gris", 0.82, 7, -6) + nuage("blanc", 1, -2, 4);
         case "couvert":
-            return nuage("sombre", "translate(5,-5) scale(0.82)") + nuage("gris", "translate(-2,3)");
+            return nuage("sombre", 0.85, 7, -6) + nuage("gris", 1.02, -2, 4);
         case "pluie-faible":
-            return `<g transform="translate(0,-4)">${nuage("gris")}${gouttes(1)}</g>`;
+            return `<g transform="translate(0,-6)">${gouttes(2)}${nuage("gris")}</g>`;
         case "pluie":
-            return `<g transform="translate(0,-4)">${nuage("gris")}${gouttes(2)}</g>`;
+            return `<g transform="translate(0,-6)">${gouttes(3)}${nuage("gris")}</g>`;
         case "pluie-forte":
-            return `<g transform="translate(0,-4)">${nuage("sombre")}${gouttes(3)}</g>`;
+            return `<g transform="translate(0,-6)">${gouttes(5)}${nuage("sombre", 1.06)}</g>`;
         case "averses":
-            return `<g transform="translate(-7,-10) scale(0.7)">${astre}</g>` +
-                `<g transform="translate(2,-1) scale(0.9)">${nuage("gris")}${gouttes(2)}</g>`;
+            return astre(jour, 0.8, -9, -11) + `<g transform="translate(3,-2)">${gouttes(2)}${nuage("gris", 0.92)}</g>`;
         case "neige":
-            return `<g transform="translate(0,-4)">${nuage("gris")}${[-7, 0, 7].map(x =>
-                `<circle class="flocon contour" cx="${x}" cy="14" r="1.9"/>`).join("")}</g>`;
+            return `<g transform="translate(0,-6)">${flocons(3)}${nuage("gris")}</g>`;
         case "brouillard":
-            return [-7, 0, 7].map((y, i) =>
-                `<line class="brume" x1="${-13 + i * 2}" y1="${y}" x2="${13 - (2 - i) * 2}" y2="${y}"/>`).join("");
+            return (jour ? astre(true, 0.7, 0, -10) : "") +
+                [-3, 4, 11].map((y, i) =>
+                    `<path class="p-brume" style="animation-delay:${-i * 1.7}s" d="M${-17 + i * 3} ${y}H${17 - (2 - i) * 3}"/>`).join("");
         case "orage":
-            return `<g transform="translate(0,-4)">${nuage("sombre")}<path class="eclair contour" d="M1 9l-6 9h4l-2 7 8-10h-4.5l3-6z"/></g>`;
+            return `<g transform="translate(0,-6)">${gouttes(2, 16)}<path class="p-eclair" d="${ECLAIR}"/>${nuage("sombre", 1.06)}</g>`;
         default:
-            return `<circle class="sec" r="3.6"/>`;
+            return `<circle class="p-sec" r="4"/>`;
     }
+}
+
+// Étiquette de température à côté du pictogramme
+function etiquette(t, grandeur) {
+    if (t === null || !Number.isFinite(t)) return "";
+    const valeur = Math.round(t);
+    const largeur = 13 + 9.5 * String(valeur).length;
+    const couleur = d3.color(teinteTemperature(t)).formatHex();
+    return `<g class="p-etiquette" transform="translate(${25 * grandeur},${-1 * grandeur}) scale(${grandeur})">` +
+        `<rect x="0" y="-12" width="${largeur + 5}" height="24" rx="3"/>` +
+        `<rect class="p-repere" x="${largeur}" y="-12" width="5" height="24" fill="${couleur}"/>` +
+        `<text x="${largeur / 2}" y="0.5">${valeur}</text></g>`;
+}
+
+function teinteTemperature(t) {
+    const { table, debut, pas, taille } = teintesTemperature;
+    let i = Math.round((t - debut) / pas);
+    i = (i < 0 ? 0 : i >= taille ? taille - 1 : i) * 3;
+    return `rgb(${table[i]},${table[i + 1]},${table[i + 2]})`;
 }
 
 // --- Chargement de la carte fusionnée -------------------------------------
@@ -1142,251 +1629,33 @@ function carteConditions() {
     return carte && !carte.absente ? carte : null;
 }
 
-// Valeur d'un champ au point (lon, lat) : cellule la plus proche
-function cellule(carte, lon, lat) {
-    const g = carte.grille;
-    const i = Math.floor((lon - g.ouest) / g.pas);
-    const j = Math.floor((g.nord - lat) / g.pas);
-    if (i < 0 || j < 0 || i >= g.nx || j >= g.ny) return -1;
-    return j * g.nx + i;
-}
-
-// --- Rendu du ciel : nuages, soleil, pluie, neige, brume -------------------
-
-// Texture de bruit (fBm) pour donner du modelé aux nuages ; tirée une fois.
-let textureBruit = null;
-
-function bruit() {
-    if (textureBruit) return textureBruit;
-
-    const taille = 256;
-    let graine = 1234567;
-    const alea = () => ((graine = (graine * 1103515245 + 12345) % 2147483648) / 2147483648);
-
-    const somme = new Float32Array(taille * taille);
-    let amplitude = 1, total = 0;
-
-    for (let octave = 0; octave < 5; octave++) {
-        const n = 4 << octave;              // 4, 8, 16, 32, 64 cellules
-        const reseau = new Float32Array((n + 1) * (n + 1));
-        for (let k = 0; k < reseau.length; k++) reseau[k] = alea();
-        for (let k = 0; k <= n; k++) {      // raccord : texture répétable
-            reseau[k * (n + 1) + n] = reseau[k * (n + 1)];
-            reseau[n * (n + 1) + k] = reseau[k];
-        }
-        for (let y = 0; y < taille; y++) {
-            const fy = y / taille * n, y0 = Math.floor(fy), ty = fy - y0;
-            const sy = ty * ty * (3 - 2 * ty);
-            for (let x = 0; x < taille; x++) {
-                const fx = x / taille * n, x0 = Math.floor(fx), tx = fx - x0;
-                const sx = tx * tx * (3 - 2 * tx);
-                const a = reseau[y0 * (n + 1) + x0], b = reseau[y0 * (n + 1) + x0 + 1];
-                const c = reseau[(y0 + 1) * (n + 1) + x0], d = reseau[(y0 + 1) * (n + 1) + x0 + 1];
-                somme[y * taille + x] += amplitude * ((a + (b - a) * sx) * (1 - sy) + (c + (d - c) * sx) * sy);
-            }
-        }
-        total += amplitude;
-        amplitude *= 0.55;
+// Nuit sur la France si la majorité des cellules françaises sont de nuit
+function nuitSurLaFrance(carte) {
+    if (!carte) return false;
+    const fl = carte.donnees.drapeaux, cat = carte.donnees.categorie;
+    let nuit = 0, total = 0;
+    for (let i = 0; i < fl.length; i += 3) {
+        if (cat[i] === 0 || cat[i] === 255) continue;
+        total++;
+        if (!(fl[i] & 32)) nuit++;
     }
-
-    for (let k = 0; k < somme.length; k++) somme[k] /= total;
-    textureBruit = { valeurs: somme, taille };
-    return textureBruit;
-}
-
-function lissage(a, b, x) {
-    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
-    return t * t * (3 - 2 * t);
-}
-
-function dessinerCiel() {
-    const canvas = $("ciel");
-    const carte = carteConditions();
-    const ctx = canvas.getContext("2d");
-
-    // Les nuages sont doux : une demi-résolution suffit et reste rapide
-    const W = Math.round(etat.largeur / 2), H = Math.round(etat.hauteur / 2);
-    canvas.width = W;
-    canvas.height = H;
-    ctx.clearRect(0, 0, W, H);
-
-    const masques = { pluie: null, neige: null, brume: null };
-
-    if (!carte) {
-        appliquerMasques(masques);
-        return;
-    }
-
-    const g = carte.grille;
-    const nebulosite = carte.donnees.nebulosite;
-    const intensite = carte.donnees.intensite;
-    const drapeaux = carte.donnees.drapeaux;
-    const categorie = carte.donnees.categorie;
-    const codeBrouillard = carte.categories.indexOf("brouillard");
-
-    // Position de chaque colonne / ligne dans la grille (Mercator : séparable)
-    const gx = new Float32Array(W), gy = new Float32Array(H);
-    for (let x = 0; x < W; x++) gx[x] = (etat.projection.invert([(x + 0.5) * 2, 0])[0] - g.ouest) / g.pas - 0.5;
-    for (let y = 0; y < H; y++) gy[y] = (g.nord - etat.projection.invert([0, (y + 0.5) * 2])[1]) / g.pas - 0.5;
-
-    // France à l'écran, pour atténuer le ciel des pays voisins
-    const masqueFrance = document.createElement("canvas");
-    masqueFrance.width = W; masqueFrance.height = H;
-    const mf = masqueFrance.getContext("2d");
-    mf.setTransform(0.5, 0, 0, 0.5, 0, 0);
-    tracerSurCanvas(mf, etat.departements);
-    mf.fillStyle = "#000";
-    mf.fill();
-    const dansFrance = mf.getImageData(0, 0, W, H).data;
-
-    const image = ctx.createImageData(W, H);
-    const px = image.data;
-    const mPluie = new Uint8ClampedArray(W * H), mNeige = new Uint8ClampedArray(W * H), mBrume = new Uint8ClampedArray(W * H);
-
-    const { valeurs: tex, taille: T } = bruit();
-    const echelleBruit = largeurFrance() / 2 / 1.7;   // ~2 motifs sur la largeur de la France
-
-    function bilineaire(champ, fx, fy) {
-        const i0 = Math.floor(fx), j0 = Math.floor(fy);
-        const tx = fx - i0, ty = fy - j0;
-        let somme = 0, poids = 0;
-        for (let dj = 0; dj <= 1; dj++) {
-            const j = j0 + dj;
-            if (j < 0 || j >= g.ny) continue;
-            for (let di = 0; di <= 1; di++) {
-                const i = i0 + di;
-                if (i < 0 || i >= g.nx) continue;
-                const v = champ[j * g.nx + i];
-                if (v === 255) continue;
-                const w = (di ? tx : 1 - tx) * (dj ? ty : 1 - ty);
-                somme += v * w;
-                poids += w;
-            }
-        }
-        return poids > 0.25 ? somme / poids : -1;
-    }
-
-    for (let y = 0; y < H; y++) {
-        const fy = gy[y];
-        if (fy < -1 || fy > g.ny) continue;
-
-        for (let x = 0; x < W; x++) {
-            const fx = gx[x];
-            if (fx < -1 || fx > g.nx) continue;
-
-            const n = bilineaire(nebulosite, fx, fy);
-            if (n < 0) continue;
-
-            const i = Math.max(0, Math.min(g.nx - 1, Math.round(fx)));
-            const j = Math.max(0, Math.min(g.ny - 1, Math.round(fy)));
-            const c = j * g.nx + i;
-            const fl = drapeaux[c];
-            const jour = (fl & 32) !== 0;
-
-            const k = (y * W + x);
-            const p = k * 4;
-            const france = dansFrance[p + 3] > 0;
-            // Hors de France, ciel atténué ; près du bord de la grille, fondu
-            // progressif pour ne jamais laisser voir le rectangle de calcul.
-            const bord = Math.min(fx, fy, g.nx - 1 - fx, g.ny - 1 - fy);
-            const attenuation = (france ? 1 : 0.6) * lissage(0, 22, bord);
-            if (attenuation <= 0) continue;
-
-            // Texture : deux échelles de bruit pour un modelé de cumulus
-            const u = (x / echelleBruit) * T, v = (y / echelleBruit) * T;
-            const b1 = tex[((v | 0) % T) * T + ((u | 0) % T)];
-            const b2 = tex[(((v * 2.7) | 0) % T) * T + (((u * 2.7) | 0) % T)];
-            const b = 0.78 * b1 + 0.22 * b2;
-
-            const d = n / 100;
-            // Plus la nébulosité est forte, plus le seuil baisse : le ciel se
-            // ferme. Bords nets pour des nuages dessinés, pas un voile.
-            const seuil = 0.74 - 0.6 * d;
-            let alpha = lissage(seuil - 0.015, seuil + 0.07, b) * (0.62 + 0.33 * d);
-            if (d > 0.85) alpha = Math.max(alpha, 0.5 + 0.35 * b);
-
-            const pluie = bilineaire(intensite, fx, fy);       // dixièmes de mm/h
-            const gris = pluie > 2 ? Math.min(1, 0.4 + pluie / 100) : d > 0.85 ? 0.3 : 0;
-
-            // Modelé : sommets éclairés en haut à gauche, cœurs plus denses
-            // légèrement ombrés, comme des cumulus vus d'en haut.
-            const bh = tex[((((v - 4) | 0) % T + T) % T) * T + ((((u - 4) | 0) % T + T) % T)];
-            const relief = Math.max(-0.16, Math.min(0.16, (bh - b) * 2.2));
-            const epaisseur = lissage(seuil, seuil + 0.35, b);
-
-            const blanc = 252 - gris * 105 - epaisseur * 26 + relief * 190;
-            px[p] = blanc - 5;
-            px[p + 1] = blanc - 2;
-            px[p + 2] = blanc + 3;
-            px[p + 3] = Math.round(255 * Math.min(0.94, alpha) * attenuation);
-
-            // Soleil : voile chaud sur les zones dégagées de France, de jour
-            if (france && jour && d < 0.45 && px[p + 3] < 70) {
-                const chaleur = (1 - d / 0.45) * 0.42 * attenuation;
-                const a0 = px[p + 3] / 255;
-                const a1 = a0 + chaleur * (1 - a0);
-                px[p] = (px[p] * a0 + 255 * chaleur * (1 - a0)) / a1;
-                px[p + 1] = (px[p + 1] * a0 + 196 * chaleur * (1 - a0)) / a1;
-                px[p + 2] = (px[p + 2] * a0 + 74 * chaleur * (1 - a0)) / a1;
-                px[p + 3] = Math.round(a1 * 255);
-            }
-
-            if (pluie >= 2) {
-                const force = lissage(2, 30, pluie) * 0.75 + 0.25;
-                if (fl & 1) mNeige[k] = 255 * force * attenuation;
-                else mPluie[k] = 255 * force * attenuation;
-            }
-            if (categorie[c] === codeBrouillard) mBrume[k] = 200 * attenuation;
-        }
-    }
-
-    ctx.putImageData(image, 0, 0);
-
-    const fabrique = valeurs => {
-        let present = false;
-        for (let k = 0; k < valeurs.length; k += 7) if (valeurs[k]) { present = true; break; }
-        if (!present) return null;
-        const c2 = document.createElement("canvas");
-        c2.width = W; c2.height = H;
-        const ctx2 = c2.getContext("2d");
-        const im = ctx2.createImageData(W, H);
-        for (let k = 0; k < valeurs.length; k++) im.data[k * 4 + 3] = valeurs[k];
-        ctx2.putImageData(im, 0, 0);
-        // Bords adoucis
-        const c3 = document.createElement("canvas");
-        c3.width = W; c3.height = H;
-        const ctx3 = c3.getContext("2d");
-        ctx3.filter = "blur(2px)";
-        ctx3.drawImage(c2, 0, 0);
-        return c3.toDataURL("image/png");
-    };
-
-    masques.pluie = fabrique(mPluie);
-    masques.neige = fabrique(mNeige);
-    masques.brume = fabrique(mBrume);
-    appliquerMasques(masques);
-}
-
-function appliquerMasques(masques) {
-    for (const [nom, url] of Object.entries(masques)) {
-        const element = $(`anim-${nom}`);
-        if (!element) continue;
-        if (!url) {
-            element.style.display = "none";
-            continue;
-        }
-        element.style.display = "";
-        element.style.webkitMaskImage = element.style.maskImage = `url(${url})`;
-    }
+    return total > 0 && nuit / total > 0.5;
 }
 
 // --- Symboles répartis sur le territoire -----------------------------------
 
 let cheminFrance = null;
+const contexteTest = nouveauCanvas(1, 1).getContext("2d");
 
 function construireCheminFrance() {
+    if (cheminFrance) return;
     cheminFrance = new Path2D();
     d3.geoPath(etat.projection, cheminFrance)(etat.departements);
+}
+
+function dansFrance(x, y) {
+    construireCheminFrance();
+    return contexteTest.isPointInPath(cheminFrance, x, y);
 }
 
 function positionsSymboles(espacement) {
@@ -1395,22 +1664,24 @@ function positionsSymboles(espacement) {
     const positions = [];
     const hauteurLigne = espacement * 0.866;
     const hg = etat.projection([-5.4, 51.3]), bd = etat.projection([9.8, 41.2]);
-    const ctx = $("hachures").getContext("2d");
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     let ligne = 0;
     for (let y = hg[1] + hauteurLigne / 2; y < bd[1]; y += hauteurLigne, ligne++) {
         const decalage = (ligne % 2) * espacement / 2;
         for (let x = hg[0] + decalage; x < bd[0]; x += espacement) {
-            const jx = Math.sin(x * 12.9898 + y * 78.233) * 0.12 * espacement;
-            const jy = Math.cos(x * 39.346 + y * 11.135) * 0.12 * espacement;
+            const jx = Math.sin(x * 12.9898 + y * 78.233) * 0.1 * espacement;
+            const jy = Math.cos(x * 39.346 + y * 11.135) * 0.1 * espacement;
             const px = x + jx, py = y + jy;
             if (px < 16 || py < 16 || px > etat.largeur - 16 || py > etat.hauteur - 16) continue;
-            if (ctx.isPointInPath(cheminFrance, px, py)) positions.push([px, py]);
+            if (dansFrance(px, py)) positions.push([px, py]);
         }
     }
-    ctx.restore();
+
+    // La Corse est petite : au moins un symbole
+    const corse = etat.projection([9.05, 42.15]);
+    if (!positions.some(([x, y]) => Math.hypot(x - corse[0], y - corse[1]) < espacement * 0.6)) {
+        positions.push(corse);
+    }
     return positions;
 }
 
@@ -1434,7 +1705,7 @@ function situationAutour(carte, x, y, rayon) {
             const c = j * g.nx + i;
             const code = carte.donnees.categorie[c];
             const nom = carte.categories[code];
-            if (nom === "inconnu") continue;
+            if (!nom || nom === "inconnu") continue;
             const conf = carte.donnees.confiance[c];
             const w = (POIDS_CATEGORIE[nom] || 1) * (0.5 + conf / 3);
             poids.set(nom, (poids.get(nom) || 0) + w);
@@ -1472,23 +1743,29 @@ function placerConditions() {
     const carte = carteConditions();
     const calque = d3.select("#calque-conditions");
 
+    // Fond de jour ou de nuit, selon la situation sur la France
+    const nuit = nuitSurLaFrance(carte);
+    if (nuit !== etat.nuitConditions) {
+        etat.nuitConditions = nuit;
+        etat.fondsAJour.delete("conditions");
+    }
+    scene.classList.toggle("conditions-nuit", nuit);
+    assurerFond("conditions");
+
     if (!carte) {
-        dessinerCiel();
         placerConditionsStations();
         return;
     }
 
-    construireCheminFrance();
-    dessinerCiel();
-
     const unite = largeurFrance();
-    const espacement = Math.max(46, Math.min(96, unite / 10.5));
-    const grandeur = Math.max(0.75, Math.min(1.55, espacement / 60));
+    const espacement = Math.max(62, Math.min(150, unite / 6.4));
+    const grandeur = Math.max(0.78, Math.min(1.55, espacement / 92));
 
     const symboles = [];
     for (const [x, y] of positionsSymboles(espacement)) {
-        const s = situationAutour(carte, x, y, espacement * 0.55);
-        if (s) symboles.push({ id: `${Math.round(x)}:${Math.round(y)}`, x, y, ...s });
+        const s = situationAutour(carte, x, y, espacement * 0.5);
+        // L'étiquette est à droite : le pictogramme se décale un peu à gauche
+        if (s) symboles.push({ id: `${Math.round(x)}:${Math.round(y)}`, x: x - 12 * grandeur, y, ...s });
     }
 
     calque.selectAll("g.vent-fort").remove();
@@ -1498,8 +1775,10 @@ function placerConditions() {
         .join("g")
         .attr("class", d => "symbole" + (d.confiance < 1.5 ? " estime" : ""))
         .attr("tabindex", 0)
-        .attr("transform", d => `translate(${d.x},${d.y}) scale(${grandeur})`)
-        .html(d => `<circle r="20" fill="transparent"/>${dessinSymbole(DESSIN_CATEGORIE[d.categorie], d.jour)}`)
+        .attr("transform", d => `translate(${d.x},${d.y})`)
+        .html(d => `<circle r="${26 * grandeur}" fill="transparent"/>` +
+            `<g transform="scale(${grandeur})" class="picto">${dessinSymbole(DESSIN_CATEGORIE[d.categorie], d.jour)}</g>` +
+            etiquette(d.temperature, grandeur))
         .on("pointerenter focus", (evenement, d) => montrerBulle(d, bulleConditionFusion(d, carte)))
         .on("pointerleave blur", cacherBulle);
 
@@ -1515,7 +1794,6 @@ function placerVents(carte, espacement, grandeur, symboles = []) {
     const hg = etat.projection([-6.4, 51.9]), bd = etat.projection([10.9, 40.6]);
     const pas = Math.max(2, Math.round(espacement / 2 / ((bd[0] - hg[0]) / g.nx)));
 
-    const ctx = $("hachures").getContext("2d");
     for (let j = 0; j < g.ny; j += pas) {
         for (let i = 0; i < g.nx; i += pas) {
             const c = j * g.nx + i;
@@ -1524,7 +1802,7 @@ function placerVents(carte, espacement, grandeur, symboles = []) {
             const lon = g.ouest + (i + 0.5) * g.pas, lat = g.nord - (j + 0.5) * g.pas;
             const [x, y] = etat.projection([lon, lat]);
             if (x < 24 || y < 70 || x > etat.largeur - 40 || y > etat.hauteur - 40) continue;
-            if (ctx.isPointInPath(cheminFrance, x, y)) continue;   // la France porte les symboles
+            if (dansFrance(x, y)) continue;   // la France porte les pictogrammes
             if (symboles.some(s => Math.hypot(s.x - x, s.y - y) < espacement * 0.75)) continue;
             candidats.push({ x, y, rafale: r, direction: carte.donnees.direction[c] * 2 });
         }
@@ -1533,7 +1811,7 @@ function placerVents(carte, espacement, grandeur, symboles = []) {
     candidats.sort((a, b) => b.rafale - a.rafale);
     const retenus = [];
     for (const c of candidats) {
-        if (retenus.length >= 9) break;
+        if (retenus.length >= 8) break;
         if (retenus.every(r => Math.hypot(r.x - c.x, r.y - c.y) > espacement * 1.6)) retenus.push(c);
     }
 
@@ -1586,8 +1864,8 @@ function placerConditionsStations() {
     }
 
     const unite = largeurFrance();
-    const tailleCase = Math.max(58, unite / 6.4);
-    const grandeur = Math.max(0.8, Math.min(1.9, tailleCase / 62));
+    const tailleCase = Math.max(62, unite / 6.4);
+    const grandeur = Math.max(0.78, Math.min(1.55, tailleCase / 92));
 
     const famille = s => s.condition.code.split("-")[0];
     const choix = choisirParCases(stations, tailleCase, 0, famille);
@@ -1597,20 +1875,12 @@ function placerConditionsStations() {
         .join("g")
         .attr("class", "symbole")
         .attr("tabindex", 0)
-        .attr("transform", d => `translate(${d.x},${d.y}) scale(${grandeur})`)
+        .attr("transform", d => `translate(${d.x},${d.y})`)
         .html(d => {
             const c = d.station.condition;
-            let dessin = dessinSymbole(c.code, c.jour);
-
-            if (c.vent && Number.isFinite(d.station.rafale)) {
-                const cap = Number.isFinite(d.station.direction_vent)
-                    ? d.station.direction_vent + 180 : null;
-                const fleche = cap === null ? "" :
-                    `<path class="vent-fleche contour" transform="translate(-9,22) rotate(${cap}) scale(0.8)" d="M0-7l4.2 9.5-4.2-2.4-4.2 2.4z"/>`;
-                dessin += `<g class="vent">${fleche}<text class="vent-valeur" x="${cap === null ? 0 : 5}" y="26">${Math.round(d.station.rafale * 3.6)}</text></g>`;
-            }
-
-            return `<circle r="20" fill="transparent"/>${dessin}`;
+            return `<circle r="${26 * grandeur}" fill="transparent"/>` +
+                `<g transform="scale(${grandeur})" class="picto">${dessinSymbole(c.code, c.jour)}</g>` +
+                etiquette(d.station.temperature, grandeur);
         })
         .on("pointerenter focus", (evenement, d) => montrerBulle(d, bulleCondition(d.station)))
         .on("pointerleave blur", cacherBulle);
@@ -1619,7 +1889,423 @@ function placerConditionsStations() {
 }
 
 // ---------------------------------------------------------------------------
-// 8. Habillage
+// 8. Tableau 4 — satellite
+// ---------------------------------------------------------------------------
+
+let chargementSatellite = null;
+
+// Fond Blue Marble : la version légère sur petit écran
+function chargerImageSatellite() {
+    if (chargementSatellite) return chargementSatellite;
+
+    const jour = etat.jour;
+    const url = "/meteo/api/geocolour/" +
+        (jour ? `?jour=${encodeURIComponent(jour)}` : "");
+
+    chargementSatellite = fetch(url)
+        .then(reponse => {
+            if (!reponse.ok) {
+                throw new Error("API GeoColour indisponible");
+            }
+            return reponse.json();
+        })
+        .then(async donnees => {
+            if (!donnees.trames.length) {
+                const reponse = await fetch(
+                    "/meteo/api/geocolour/?dernier=1"
+                );
+
+                if (!reponse.ok) {
+                    throw new Error("API GeoColour indisponible");
+                }
+
+                donnees = await reponse.json();
+            }
+
+            if (!donnees.trames.length) {
+                throw new Error("Aucune observation disponible");
+            }
+
+            const derniere = donnees.trames.at(-1);
+
+            return chargerImage(derniere.url).then(image => {
+                etat.imageSatellite = image;
+                etat.instantGeocolour = derniere.instant;
+
+                etat.jourGeocolour = jour;
+                etat.erreurGeocolour = null;
+
+                etat.fondsAJour.delete("satellite");
+
+                if (etat.tableau === "satellite") {
+                    assurerFond("satellite");
+                    actualiserHabillage();
+                }
+            });
+        })
+        .catch(erreur => {
+            if (etat.jour === jour) {
+                etat.erreurGeocolour = erreur.message;
+            }
+            console.warn("HKO : GeoColour —", erreur.message);
+        })
+        .finally(() => {
+            chargementSatellite = null;
+            actualiserHabillage();
+        });
+
+    return chargementSatellite;
+}
+
+// ---------------------------------------------------------------------------
+// 9. Lecture des animations (frise temporelle)
+// ---------------------------------------------------------------------------
+
+const DUREE_BOUCLE = 10000;   // une boucle complète, en millisecondes
+const ARRET_FIN = 2600;       // pause sur la dernière observation
+
+// Tableau animé -> source des images
+const SOURCE_ANIMEE = { precipitations: "radar", satellite: "satellite" };
+const sourceAffichee = () => SOURCE_ANIMEE[etat.tableau] || null;
+
+const lecteur = {
+    source: null,             // "radar" ou "satellite"
+    instant: 0,               // ms, temps de la séquence affichée
+    lecture: !reduitMouvement,
+    pause: 0,                 // temps restant sur la dernière image
+    precedent: 0,
+    boucle: 0
+};
+
+async function chargerAnimation(source, jour) {
+    const cache = etat.animations[source];
+    const connue = cache.get(jour);
+    const aujourdhui = etat.donnees && etat.donnees.aujourdhui;
+    if (connue && (connue.absente ? Date.now() - connue.recu < 60000 :
+        jour !== aujourdhui || Date.now() - connue.recu < 3 * 60000)) return connue;
+
+    let resultat;
+    try {
+        const url = source === "satellite"
+            ? `/meteo/api/geocolour/?jour=${encodeURIComponent(jour)}`
+            : `${URL_ANIMATION}?source=${source}&jour=${encodeURIComponent(jour)}`;
+
+        const reponse = await fetch(url);
+        if (!reponse.ok) {
+            const corps = await reponse.json().catch(() => ({}));
+            resultat = { absente: true, motif: corps.erreur || `Erreur ${reponse.status}` };
+        } else {
+            const donnees = await reponse.json();
+
+            if (source === "satellite") {
+                resultat = {
+                    ...donnees,
+                    trames: donnees.trames.map(trame => ({
+                        ...trame,
+                        ms: Date.parse(trame.instant)
+                    }))
+                };
+            } else {
+                resultat = HKOAnime.decoder(donnees);
+            }
+            if (!resultat.trames.length) resultat = { absente: true, motif: "Aucune image." };
+        }
+    } catch (erreur) {
+        resultat = { absente: true, motif: "Le serveur n'a pas répondu.", reseau: true };
+    }
+    resultat.recu = Date.now();
+
+    // Même séquence qu'avant : on garde celle déjà envoyée au rendu
+    if (connue && !connue.absente && !resultat.absente &&
+        connue.trames.length === resultat.trames.length &&
+        connue.trames.at(-1).ms === resultat.trames.at(-1).ms) {
+        connue.recu = resultat.recu;
+        return connue;
+    }
+    cache.set(jour, resultat);
+    return resultat;
+}
+
+function sequenceDuJour(source) {
+    const s = etat.jour && etat.animations[source].get(etat.jour);
+    return s && !s.absente ? s : null;
+}
+
+function creerRenduGeocolour() {
+    let demande = null;
+    let affichee = null;
+
+    return {
+        sequence: null,
+
+        charger(sequence) {
+            this.sequence = sequence;
+            demande = null;
+            affichee = null;
+        },
+
+        situation(instant) {
+            if (!this.sequence?.trames.length) return null;
+
+            let index = 0;
+
+            for (let i = 0; i < this.sequence.trames.length; i++) {
+                if (this.sequence.trames[i].ms > instant) break;
+                index = i;
+            }
+
+            return {
+                avant: index,
+                observee: true,
+                lacune: false
+            };
+        },
+
+        dessiner({ instant }) {
+            const s = this.situation(instant);
+            if (!s) return;
+
+            const sequence = this.sequence;
+            const trame = sequence.trames[s.avant];
+
+            if (affichee === trame.url || demande) return;
+
+            const jour = etat.jour;
+            const requete = {};
+            demande = requete;
+
+            chargerImage(trame.url)
+                .then(image => {
+                    if (this.sequence !== sequence ||
+                        etat.jour !== jour ||
+                        etat.tableau !== "satellite") return;
+
+                    etat.imageSatellite = image;
+                    etat.instantGeocolour = trame.instant;
+                    etat.jourGeocolour = jour;
+
+                    affichee = trame.url;
+
+                    etat.fondsAJour.delete("satellite");
+                    assurerFond("satellite");
+                })
+                .catch(erreur => {
+                    console.warn("GeoColour :", erreur);
+                })
+                .finally(() => {
+                    if (demande === requete) demande = null;
+                });
+        }
+    };
+}
+
+function rendu(source) {
+
+    if (source === "satellite") {
+        if (!etat.rendus.satellite) {
+            etat.rendus.satellite = creerRenduGeocolour();
+        }
+        return etat.rendus.satellite;
+    }
+    if (etat.rendus[source] === undefined) {
+        etat.rendus[source] = window.HKOAnime ? HKOAnime.creer($(`gl-${source}`), source) : null;
+        if (!etat.rendus[source]) scene.classList.add(`sans-gl-${source}`);
+    }
+    return etat.rendus[source];
+}
+
+// Prépare l'animation du tableau affiché (ou du suivant, en avance)
+async function preparerAnimation(source) {
+    const jour = etat.jour;
+    if (!jour || !etat.donnees || etat.donnees.type === "prevision") return null;
+
+    const sequence = await chargerAnimation(source, jour);
+    if (etat.jour !== jour) return null;
+
+    const r = rendu(source);
+    if (r && !sequence.absente && r.sequence !== sequence) {
+        r.charger(sequence);
+        if (lecteur.source === source) lecteur.instant = sequence.trames.at(-1).ms;
+    }
+    if (sourceAffichee() === source) {
+        demarrerLecture(source);
+        actualiserHabillage();
+    }
+    return sequence;
+}
+
+function demarrerLecture(source) {
+    const sequence = sequenceDuJour(source);
+    const r = etat.rendus[source];
+    if (!sequence || !r) {
+        arreterLecture();
+        $("frise").hidden = true;
+        return;
+    }
+
+    const nouvelle = lecteur.source !== source || lecteur.sequence !== sequence;
+    lecteur.source = source;
+    lecteur.sequence = sequence;
+
+    if (nouvelle) {
+        if (source === "satellite") {
+            lecteur.lecture = etat.jour !== etat.donnees?.aujourdhui
+                && !reduitMouvement;
+        }
+        construireFrise(sequence);
+        // On commence au début de la boucle (ou sur la dernière image, sans animation)
+        lecteur.instant = lecteur.lecture ? sequence.trames[0].ms : sequence.trames.at(-1).ms;
+        lecteur.pause = 0;
+    }
+    $("frise").hidden = false;
+
+    cancelAnimationFrame(lecteur.boucle);
+    lecteur.precedent = performance.now();
+    lecteur.boucle = requestAnimationFrame(avancer);
+}
+
+function arreterLecture() {
+    cancelAnimationFrame(lecteur.boucle);
+    lecteur.boucle = 0;
+}
+
+function avancer(maintenant) {
+    const sequence = lecteur.sequence;
+    if (!sequence || sourceAffichee() !== lecteur.source || document.hidden) {
+        lecteur.boucle = 0;
+        return;
+    }
+
+    const dt = Math.min(100, maintenant - lecteur.precedent);
+    lecteur.precedent = maintenant;
+
+    const debut = sequence.trames[0].ms, fin = sequence.trames.at(-1).ms;
+    if (lecteur.lecture && fin > debut) {
+        if (lecteur.instant >= fin) {
+            lecteur.pause += dt;
+            if (lecteur.pause >= ARRET_FIN) {
+                lecteur.instant = debut;
+                lecteur.pause = 0;
+            }
+        } else {
+            lecteur.instant = Math.min(fin, lecteur.instant + dt * (fin - debut) / DUREE_BOUCLE);
+        }
+    }
+
+    dessinerAnimation();
+    lecteur.boucle = requestAnimationFrame(avancer);
+}
+
+function dessinerAnimation() {
+    const source = lecteur.source;
+    const r = source && etat.rendus[source];
+    if (!r || !lecteur.sequence) return;
+
+    const commun = {
+        instant: lecteur.instant,
+        projection: etat.projection,
+        echelle: etat.echelle
+    };
+
+    if (source === "radar") {
+        const { seuils, couleurs } = paletteRadar();
+        // Image pleine résolution par-dessus la dernière grille, si elle lui correspond
+        const s = r.situation(lecteur.instant);
+        const derniere = s && s.observee && s.avant === lecteur.sequence.trames.length - 1;
+        const hd = derniere && radarDuJour() &&
+            Date.parse(etat.radar.date_utc) === lecteur.sequence.trames.at(-1).ms;
+        scene.classList.toggle("radar-hd", Boolean(hd));
+
+        r.dessiner({
+            ...commun,
+            seuils: new Float32Array(seuils),
+            couleurs: new Float32Array(couleurs.flatMap(c => rgb(c).map(v => v / 255))),
+            hachures: true
+        });
+    } else {
+        r.dessiner({ ...commun, detail: true });
+    }
+
+    majFrise();
+}
+
+// --- Frise ------------------------------------------------------------------
+
+function construireFrise(sequence) {
+    const debut = sequence.trames[0].ms, fin = sequence.trames.at(-1).ms;
+    const etendue = Math.max(1, fin - debut);
+    $("frise-reperes").innerHTML = sequence.trames.map(t =>
+        `<span style="left:${((t.ms - debut) / etendue * 100).toFixed(2)}%"></span>`).join("");
+    // Heures rondes sous la frise
+    const heures = [];
+    const premiere = Math.ceil(debut / 3600000) * 3600000;
+    for (let h = premiere; h <= fin; h += 3600000) {
+        heures.push(`<span style="left:${((h - debut) / etendue * 100).toFixed(2)}%">${heureParis(new Date(h).toISOString()).replace(" 00", "")}</span>`);
+    }
+    $("frise-heures").innerHTML = heures.join("");
+    majBoutonAnimation();
+}
+
+function majFrise() {
+    const sequence = lecteur.sequence;
+    if (!sequence) return;
+    const debut = sequence.trames[0].ms, fin = sequence.trames.at(-1).ms;
+    const part = fin > debut ? (lecteur.instant - debut) / (fin - debut) : 1;
+    const curseur = $("frise-curseur");
+    if (document.activeElement !== curseur) curseur.value = Math.round(part * 1000);
+    $("frise").style.setProperty("--avance", part.toFixed(4));
+
+    const r = etat.rendus[lecteur.source];
+    const s = r && r.situation(lecteur.instant);
+    if (!s) return;
+
+    const heure = s.observee
+        ? heureParis(sequence.trames[s.avant].instant)
+        : heureParis(new Date(lecteur.instant).toISOString());
+    const nature = s.observee ? "Observation"
+        : s.lacune ? "Image manquante : fondu entre deux observations"
+        : "Image calculée entre deux observations";
+
+    const cle = heure + nature;
+    if (cle !== majFrise.derniere) {
+        majFrise.derniere = cle;
+        $("frise-heure").textContent = heure;
+        $("frise-nature").textContent = nature;
+        $("frise").classList.toggle("calculee", !s.observee);
+    }
+}
+
+function majBoutonAnimation() {
+    $("frise-lecture").setAttribute("aria-label",
+        lecteur.lecture ? "Mettre l'animation en pause" : "Lire l'animation");
+    $("frise").classList.toggle("en-pause", !lecteur.lecture);
+}
+
+function installerFrise() {
+    $("frise-lecture").addEventListener("click", () => {
+        lecteur.lecture = !lecteur.lecture;
+        if (lecteur.lecture && lecteur.sequence && lecteur.instant >= lecteur.sequence.trames.at(-1).ms) {
+            lecteur.instant = lecteur.sequence.trames[0].ms;
+        }
+        lecteur.pause = 0;
+        majBoutonAnimation();
+        suspendreDefilement();
+    });
+
+    $("frise-curseur").addEventListener("input", evenement => {
+        const sequence = lecteur.sequence;
+        if (!sequence) return;
+        lecteur.lecture = false;
+        majBoutonAnimation();
+        suspendreDefilement();
+        const debut = sequence.trames[0].ms, fin = sequence.trames.at(-1).ms;
+        lecteur.instant = debut + (fin - debut) * Number(evenement.target.value) / 1000;
+        if (!lecteur.boucle) dessinerAnimation();
+    });
+}
+
+// ---------------------------------------------------------------------------
+// 10. Habillage
 // ---------------------------------------------------------------------------
 
 function bulleTemperature(s) {
@@ -1695,9 +2381,21 @@ function cacherBulle() {
 }
 
 function legendeTemperatures() {
-    const arrets = PALETTE_TEMPERATURE
-        .filter(([t]) => t >= -10 && t <= 40)
-        .map(([t, c]) => `${c} ${(t + 10) * 2}%`);
+    // Échelle en zones, au pas du jour, autour des valeurs observées
+    const pas = etat.pasBande || 2;
+    let bas = -10, haut = 40;
+    if (etat.extremes) {
+        bas = Math.floor((etat.extremes.mini.temperature - 2) / pas) * pas;
+        haut = Math.ceil((etat.extremes.maxi.temperature + 2) / pas) * pas;
+        while ((haut - bas) / pas > 16) { bas += pas; haut -= pas; }
+        if (haut - bas < 6 * pas) { bas -= pas; haut += pas; }
+    }
+    const zones = [];
+    for (let t = bas; t < haut; t += pas) zones.push(t);
+    const cases = zones.map(t =>
+        `<span style="background:${teinteTemperature(t + pas / 2)}"></span>`).join("");
+    const etiquettes = zones.filter((t, i) => i % Math.ceil(zones.length / 7) === 0)
+        .map(t => `<span style="left:${((t - bas) / (haut - bas) * 100).toFixed(1)}%">${t}</span>`).join("");
 
     let reperes = "";
     if (etat.extremes) {
@@ -1709,26 +2407,29 @@ function legendeTemperatures() {
         </div>`;
     }
 
-    return `<div class="echelle-temp">
-        <div class="degrade" style="background:linear-gradient(to right, ${PALETTE_TEMPERATURE[1][1]} 0%, ${arrets.join(", ")}, ${PALETTE_TEMPERATURE.at(-1)[1]} 100%)"></div>
-        <div class="graduations"><span>−10</span><span>0</span><span>10</span><span>20</span><span>30</span><span>40 °C</span></div>
-    </div>${reperes}`;
+    return `<div class="echelle-zones" aria-label="Zones de ${pas} °C">
+        <div class="cases">${cases}</div>
+        <div class="graduations">${etiquettes}<span class="unite">°C</span></div>
+    </div>${reperes}
+    <div class="note-legende">Chiffres : mesures des stations. Zones colorées : estimation entre les stations.</div>`;
 }
 
-function legendeRadar() {
-    const r = etat.radar;
+function legendeRadar(animation) {
+    const { seuils, couleurs } = paletteRadar();
+    const unite = (etat.radar && etat.radar.unite) || "mm/h";
 
-    const classes = r.seuils.map((seuil, i) => {
-        const dernier = i === r.seuils.length - 1;
-        return `<span style="background-image:linear-gradient(${r.couleurs[i]}, ${r.couleurs[i]})">` +
+    const classes = seuils.map((seuil, i) => {
+        const dernier = i === seuils.length - 1;
+        return `<span style="background-image:linear-gradient(${couleurs[i]}, ${couleurs[i]})">` +
             `${String(seuil).replace(".", ",")}${dernier ? "+" : ""}</span>`;
     }).join("");
 
-    const hors = etat.radarCouverture
+    const hors = animation || etat.radarCouverture
         ? `<div class="note-legende"><span class="hachure-exemple"></span>Hachures : zone sans mesure radar</div>`
         : "";
+    const source = `<div class="attributions">Radar : Météo-France</div>`;
 
-    return `<div class="classes" aria-label="Intensité en ${echapper(r.unite)}">${classes}<span style="min-width:0;padding-left:6px">${echapper(r.unite)}</span></div>${hors}`;
+    return `<div class="classes" aria-label="Intensité en ${echapper(unite)}">${classes}<span style="min-width:0;padding-left:6px">${echapper(unite)}</span></div>${hors}${source}`;
 }
 
 function habillageConditions(carte) {
@@ -1754,6 +2455,7 @@ function habillageConditions(carte) {
     }
 
     // Légende : les situations présentes sur la France, des plus fréquentes aux plus rares
+    const jour = !etat.nuitConditions;
     const resume = Object.entries(carte.resume_france || {})
         .filter(([nom, n]) => nom !== "inconnu" && n > 0)
         .sort((a, b) => b[1] - a[1])
@@ -1761,7 +2463,7 @@ function habillageConditions(carte) {
 
     const symboles = resume.map(([nom]) => {
         const code = DESSIN_CATEGORIE[nom];
-        return `<span class="cle-symbole"><svg viewBox="-20 -20 40 40" aria-hidden="true"><g class="symbole">${dessinSymbole(code, true)}</g></svg>${echapper(LIBELLES_CONDITION[code][0])}</span>`;
+        return `<span class="cle-symbole"><svg viewBox="-26 -26 52 52" aria-hidden="true"><g class="picto">${dessinSymbole(code, jour)}</g></svg>${echapper(LIBELLES_CONDITION[code][jour ? 0 : 1])}</span>`;
     }).join("");
 
     const attributions = Object.values(p).filter(s => s && s.retenue && s.attribution).map(s => s.attribution);
@@ -1770,6 +2472,30 @@ function habillageConditions(carte) {
 
     const legende = `<div class="cles-conditions">${symboles}</div>${estime}` +
         (attributions.length ? `<div class="attributions">${echapper(attributions.join(" — "))}</div>` : "");
+
+    return [sousTitre, legende];
+}
+
+function habillageSatellite(sequence) {
+    const instant = etat.instantGeocolour;
+
+    const date = instant
+        ? new Date(instant).toLocaleDateString("fr-FR", {
+            day: "numeric",
+            month: "long",
+            timeZone: "Europe/Paris"
+        })
+        : "";
+
+    const sousTitre = instant
+        ? `Observation du ${date} à ${heureParis(instant)}`
+        : "Images satellite Meteosat";
+
+    const legende =
+        `<div class="attributions">
+            EUMETSAT Meteosat · NASA Black Marble
+            · Traitement visuel HKO
+        </div>`;
 
     return [sousTitre, legende];
 }
@@ -1792,6 +2518,24 @@ function etatIndisponible() {
         return ["Pas de carte des conditions pour ce jour", carte.motif, Boolean(carte.reseau)];
     }
 
+    if (etat.tableau === "satellite") {
+        if (d.type === "prevision") {
+            return ["Pas d'image satellite pour un jour à venir",
+                "Le satellite montre les nuages observés. Les nuages prévus apparaissent dans les conditions météo."];
+        }
+        if (etat.imageSatellite) {
+            return null;
+        }
+
+        if (chargementSatellite) return null;
+
+        return [
+            "Pas d'image satellite pour ce jour",
+            etat.erreurGeocolour ||
+            "Aucune observation GeoColour disponible."
+        ];
+    }
+
     if (d.type === "prevision") {
         if (etat.tableau === "precipitations") {
             return ["Pas de radar pour un jour à venir",
@@ -1803,16 +2547,13 @@ function etatIndisponible() {
     }
 
     if (etat.tableau === "precipitations") {
-        if (etat.radar === undefined) return null;   // encore en chargement
-        if (!etat.radar) {
-            return ["Image radar absente",
-                "Aucune mosaïque radar n'a encore été convertie pour la carte."];
-        }
-        if (!radarDuJour()) {
-            return ["Pas d'image radar pour ce jour",
-                `La dernière image disponible date du ${libelleJour(jourParis(etat.radar.date_utc)).toLowerCase()}.`];
-        }
-        return null;
+        const animation = etat.animations.radar.get(etat.jour);
+        if (animation && !animation.absente && etat.rendus.radar) return null;
+        if (radarDuJour()) return null;
+        if (!animation || etat.radar === undefined) return null;   // encore en chargement
+        if (animation.reseau) return ["Radar inaccessible", animation.motif, true];
+        return ["Pas d'image radar pour ce jour", animation.motif ||
+            "Aucune mosaïque radar n'a été archivée pour ce jour."];
     }
 
     if (!d.disponible) return ["Pas d'observations pour ce jour", d.motif || ""];
@@ -1845,14 +2586,20 @@ function actualiserHabillage() {
         }
     } else if (etat.tableau === "precipitations") {
         titre = "Précipitations";
-        if (radarDuJour()) {
+        const animation = sequenceDuJour("radar");
+        if (animation && etat.rendus.radar) {
+            sousTitre = `Pluie mesurée par les radars Météo-France, de ${heureParis(animation.trames[0].instant)} ` +
+                `à ${heureParis(animation.trames.at(-1).instant)}. Pas une prévision.`;
+            legende = legendeRadar(true);
+        } else if (radarDuJour()) {
             sousTitre = `Image radar Météo-France de ${heureParis(etat.radar.date_utc)}. ` +
                 "Pluie mesurée, pas une prévision.";
-            legende = legendeRadar();
-        } else if (etat.radar === undefined) {
-            sousTitre = "Chargement de l'image radar…";
+            legende = legendeRadar(false);
+        } else if (d && d.type !== "prevision" &&
+                   (etat.radar === undefined || !etat.animations.radar.get(etat.jour))) {
+            sousTitre = "Chargement du radar…";
         }
-    } else {
+    } else if (etat.tableau === "conditions") {
         titre = "Conditions météo";
         const carte = carteConditions();
         if (carte) {
@@ -1861,9 +2608,16 @@ function actualiserHabillage() {
             sousTitre = `Observées à ${heureParis(d.date)} par les stations. ` + (d.ciel_mesure
                 ? "Pluie, neige, brouillard et état du ciel d'après leurs mesures."
                 : "L'état du ciel n'est pas mesuré : radar et satellite ne sont pas encore disponibles.");
-            legende = `<div class="note-legende">Chiffre sous un symbole : rafales de 50 km/h ou plus.</div>`;
         } else if (etat.jour && !etat.conditions.get(etat.jour)) {
             sousTitre = "Chargement de la carte des conditions…";
+        }
+    } else {
+        titre = "Satellite";
+        const sequence = sequenceDuJour("satellite");
+        if (sequence && etat.rendus.satellite) {
+            [sousTitre, legende] = habillageSatellite(sequence);
+        } else if (d && d.type !== "prevision" && !etat.animations.satellite.get(etat.jour)) {
+            sousTitre = "Chargement des images satellite…";
         }
     }
 
@@ -1883,6 +2637,13 @@ function actualiserHabillage() {
         $("indisponible-action").hidden = !vide[2];
     }
 
+    const anime = (etat.tableau === "precipitations" || etat.tableau === "satellite") &&
+        !vide && lecteur.source === sourceAffichee() && sequenceDuJour(sourceAffichee());
+    $("frise").hidden = !anime;
+
+    // Radar sans animation (pas d'archive, pas de WebGL) : image publiée seule
+    scene.classList.toggle("radar-statique", !(sequenceDuJour("radar") && etat.rendus.radar));
+
     // Jour consulté
     if (etat.jour) {
         const aujourdhui = d && d.aujourdhui;
@@ -1896,7 +2657,7 @@ function actualiserHabillage() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Navigation
+// 11. Navigation
 // ---------------------------------------------------------------------------
 
 let minuterieDefilement = null;
@@ -1928,16 +2689,19 @@ function planifierDefilement() {
     }, DUREE_TABLEAU);
 }
 
+// Un choix manuel suspend le défilement ; il reprend seul après une minute.
+function suspendreDefilement() {
+    etat.auto = false;
+    clearTimeout(minuterieReprise);
+    minuterieReprise = setTimeout(() => reglerLecture(true), REPRISE_AUTO);
+    majBoutonLecture();
+    planifierDefilement();
+}
+
 function afficherTableau(tableau, manuel = false) {
     const change = tableau !== etat.tableau;
 
-    if (manuel) {
-        // Un choix manuel suspend le défilement ; il reprend seul après une minute.
-        etat.auto = false;
-        clearTimeout(minuterieReprise);
-        minuterieReprise = setTimeout(() => reglerLecture(true), REPRISE_AUTO);
-        majBoutonLecture();
-    }
+    if (manuel) suspendreDefilement();
 
     etat.tableau = tableau;
     scene.dataset.tableau = tableau;
@@ -1947,13 +2711,28 @@ function afficherTableau(tableau, manuel = false) {
         bouton.setAttribute("aria-pressed", String(bouton.dataset.tableau === tableau));
     }
 
+    assurerFond(tableau);
+
     if (tableau === "temperatures" && change) {
         // Autres stations à chaque passage
         etat.rotation = (etat.rotation + 1) % 4;
         placerTemperatures();
     }
 
+    if (tableau === "precipitations") {
+        placerVilles();
+        preparerAnimation("radar");
+    }
+
     if (tableau === "conditions") preparerConditions();
+
+    if (tableau === "satellite") {
+        chargerImageSatellite();
+        preparerAnimation("satellite");
+    }
+
+    if (tableau !== "precipitations" && tableau !== "satellite") arreterLecture();
+    else if (change) demarrerLecture(SOURCE_ANIMEE[tableau]);
 
     actualiserHabillage();
 
@@ -1965,9 +2744,10 @@ function afficherTableau(tableau, manuel = false) {
     }
 
     // Préparation du tableau suivant pendant que celui-ci est à l'écran
-    if (tableau === "precipitations") {
-        (window.requestIdleCallback || setTimeout)(() => preparerConditions());
-    }
+    const plusTard = window.requestIdleCallback || (f => setTimeout(f, 300));
+    if (tableau === "temperatures") plusTard(() => { assurerFond("precipitations"); preparerAnimation("radar"); });
+    if (tableau === "precipitations") plusTard(() => preparerConditions());
+    if (tableau === "conditions") plusTard(() => { chargerImageSatellite(); preparerAnimation("satellite"); });
 
     planifierDefilement();
 }
@@ -2006,6 +2786,11 @@ function majBoutonLecture() {
 
 function reglerLecture(actif) {
     etat.auto = actif;
+    // Le défilement reprend : les animations aussi
+    if (actif && !reduitMouvement && !lecteur.lecture) {
+        lecteur.lecture = true;
+        majBoutonAnimation();
+    }
     clearTimeout(minuterieReprise);
     majBoutonLecture();
     planifierDefilement();
@@ -2057,12 +2842,14 @@ async function allerAuJour(jour) {
     if (demande !== demandeJour) return;   // une autre demande est passée devant
 
     installerDonnees(donnees);
+    lecteur.source = null;                 // la frise repart sur le nouveau jour
     await attendreImage();
 
     dessinerChamp();
     placerTemperatures();
     placerRadar();
     if (etat.tableau === "conditions") await preparerConditions();
+    if (sourceAffichee()) await preparerAnimation(sourceAffichee());
 
     // Si le tableau affiché n'a rien pour ce jour mais qu'un autre en a, on y va.
     if (!tableauDisponible(etat.tableau) && donnees.type !== "prevision") {
@@ -2088,8 +2875,12 @@ function installerCommandes() {
     $("indisponible-action").addEventListener("click", () => {
         etat.jours.delete(etat.jour);
         etat.conditions.delete(etat.jour);
+        etat.animations.radar.delete(etat.jour);
+        etat.animations.satellite.delete(etat.jour);
         allerAuJour(etat.jour);
     });
+
+    installerFrise();
 
     document.addEventListener("keydown", evenement => {
         if (evenement.target.closest("input, select, textarea")) return;
@@ -2097,7 +2888,12 @@ function installerCommandes() {
         if (evenement.key === "ArrowRight" && !$("jour-suivant").disabled) $("jour-suivant").click();
     });
 
-    document.addEventListener("visibilitychange", planifierDefilement);
+    document.addEventListener("visibilitychange", () => {
+        planifierDefilement();
+        if (!document.hidden && (etat.tableau === "precipitations" || etat.tableau === "satellite")) {
+            demarrerLecture(sourceAffichee());
+        }
+    });
 
     // La carte suit la taille de la fenêtre
     let minuterie = null;
@@ -2129,23 +2925,27 @@ function installerCommandes() {
         } catch (erreur) { /* on réessaiera au prochain passage */ }
         chargerRadar();
         if (etat.tableau === "conditions") preparerConditions();
+        if (sourceAffichee()) preparerAnimation(sourceAffichee());
     }, RAFRAICHISSEMENT);
 }
 
 function redessiner() {
     cacherBulle();
     cadrer();
-    dessinerFond();
+    etat.profondeurs = null;
+    assurerFond(etat.tableau);
     dessinerChamp();
     placerTemperatures();
     placerRadar();
+    placerVilles();
     etat.conditionsPretes = false;
     if (etat.tableau === "conditions") placerConditions();
+    if (lecteur.boucle === 0 && lecteur.source === sourceAffichee()) dessinerAnimation();
     actualiserHabillage();
 }
 
 // ---------------------------------------------------------------------------
-// 10. Démarrage
+// 12. Démarrage
 // ---------------------------------------------------------------------------
 
 function echecFatal(message) {
@@ -2163,8 +2963,7 @@ async function demarrer() {
 
     const debut = performance.now();
 
-    teintesRelief = tableCouleurs(PALETTE_RELIEF, 0, 3200, 10);
-    teintesTemperature = tableCouleurs(PALETTE_TEMPERATURE, -15, 42, 0.1);
+    teintesTemperature = tableCouleurs(PALETTE_TEMPERATURE, -15, 44, 0.1);
 
     cadrer();
     installerCommandes();
@@ -2189,6 +2988,13 @@ async function demarrer() {
             progresser("relief", 1);
             return null;
         });
+
+    const promesseBathymetrie = chargerImage(STATIQUE + "fonds/bathymetrie.jpg")
+        .catch(erreur => {
+            console.info("HKO : fonds marins indisponibles —", erreur.message);
+            return null;
+        })
+        .finally(() => progresser("bathymetrie", 1));
 
     const promesseObservations = chargerJour(null, "observations")
         .catch(erreur => {
@@ -2217,9 +3023,10 @@ async function demarrer() {
     }
 
     etat.relief = await promesseRelief;
+    etat.bathymetrie = await promesseBathymetrie;
 
     await attendreImage();
-    dessinerFond();
+    assurerFond("temperatures");
     progresser("fond", 1);
 
     installerDonnees(await promesseObservations);
@@ -2236,7 +3043,7 @@ async function demarrer() {
     const reste = Math.max(0, 1300 - (performance.now() - debut));
     setTimeout(fermerIntro, reste);
 
-    // Tableau suivant préparé en arrière-plan, pendant l'affichage du premier.
+    // Tableaux suivants préparés en arrière-plan, pendant l'affichage du premier.
     setTimeout(chargerRadar, reste + 400);
 }
 

@@ -509,3 +509,272 @@ def api_etat(request):
     from .sources.surveillance import etat_des_sources
 
     return JsonResponse(etat_des_sources())
+
+
+# ---------------------------------------------------------------------------
+# Animations radar et satellite (grilles archivées)
+# ---------------------------------------------------------------------------
+
+# Durée d'animation demandée par défaut et bornes acceptées (heures)
+ANIMATION_HEURES = {"radar": 3.0, "satellite": 4.0}
+ANIMATION_HEURES_MAX = 6.0
+
+# Pour un jour passé, la boucle se termine à cette heure locale
+ANIMATION_FIN_JOUR_PASSE = 16
+
+ANIMATION_ATTRIBUTIONS = {
+    "radar": "Radar : Météo-France",
+    "satellite": "Satellite : contient des données EUMETSAT Meteosat modifiées",
+}
+
+
+def _quart(valeurs):
+    """Fraction 0..1 -> entier 0..15 (4 bits)."""
+    import numpy as np
+
+    return np.clip(np.round(np.nan_to_num(valeurs, nan=0.0) * 15), 0, 15).astype(np.uint8)
+
+
+def encoder_trame(source, champs):
+    """
+    Une trame d'animation : deux plans d'octets (NY × NX) mis bout à bout.
+
+    radar      plan 1 : intensité, v = round(40 × log2(1 + mm/h)), 255 inutilisé
+               plan 2 : (fraction de pluie × 15) << 4 | (couverture radar × 15)
+    satellite  plan 1 : (nuage opaque × 15) << 4 | (nuage partiel × 15)
+               plan 2 : (neige au sol × 15) << 4 | (mesure valide × 15)
+    """
+    import numpy as np
+
+    if source == "radar":
+        intensite = np.nan_to_num(champs["intensite"].astype(np.float32), nan=0.0)
+        plan1 = np.clip(np.round(np.log2(1 + np.maximum(intensite, 0)) * 40), 0, 254).astype(np.uint8)
+        plan2 = (_quart(champs["pluie"]) << 4) | _quart(champs["couverture"])
+    else:
+        plan1 = (_quart(champs["opaque"]) << 4) | _quart(champs["partiel"])
+        plan2 = (_quart(champs["neige"]) << 4) | _quart(champs.get("valide", np.ones_like(champs["opaque"])))
+    return plan1.tobytes() + plan2.tobytes()
+
+
+def api_animation(request):
+    """
+    Boucle d'animation radar ou satellite à partir des grilles archivées.
+
+        ?source=radar|satellite   (obligatoire)
+        ?heures=3                 durée couverte (0,5 à 6 h)
+        ?jour=AAAA-MM-JJ          défaut : aujourd'hui (jusqu'à la dernière
+                                  image) ; jour passé : jusqu'à 16 h locales
+
+    Seules des observations archivées sont renvoyées, chacune avec son
+    heure exacte : les images intermédiaires sont calculées par le
+    navigateur et présentées comme telles. La réponse (JSON compressé) est
+    mise en cache tant qu'aucune nouvelle image n'arrive.
+    """
+    import base64
+    import gzip
+    import json
+    from datetime import date as Date, datetime as DateTime, time as Heure, timedelta, timezone as Fuseau
+
+    import numpy as np
+    from django.http import HttpResponse
+    from django.utils import timezone
+
+    from .models import ProduitMeteo
+    from .sources import grille
+    from .sources.commun import absolu, dossier, ecrire_atomique
+
+    source = request.GET.get("source")
+    if source not in ANIMATION_HEURES:
+        return JsonResponse({"erreur": "source doit valoir « radar » ou « satellite »."}, status=400)
+
+    try:
+        heures = float(request.GET.get("heures", ANIMATION_HEURES[source]))
+    except ValueError:
+        return JsonResponse({"erreur": "heures doit être un nombre."}, status=400)
+    heures = min(max(heures, 0.5), ANIMATION_HEURES_MAX)
+
+    aujourdhui = timezone.localdate()
+    parametre = request.GET.get("jour")
+    try:
+        jour = Date.fromisoformat(parametre) if parametre else aujourdhui
+    except ValueError:
+        return JsonResponse({"erreur": "Le jour doit être au format AAAA-MM-JJ."}, status=400)
+
+    if jour > aujourdhui:
+        return JsonResponse({"erreur": "Pas d'observation pour un jour à venir.", "jour": jour.isoformat()},
+                            status=404)
+
+    produits = ProduitMeteo.objects.filter(source=source, nature="observation")
+    debut_jour = timezone.make_aware(DateTime.combine(jour, Heure(0, 0)))
+    if jour == aujourdhui:
+        dernier = produits.filter(instant__gte=debut_jour).order_by("-instant").first()
+    else:
+        limite = timezone.make_aware(DateTime.combine(jour, Heure(ANIMATION_FIN_JOUR_PASSE, 0)))
+        dernier = produits.filter(instant__gte=debut_jour, instant__lte=limite).order_by("-instant").first()
+
+    if dernier is None:
+        return JsonResponse({"erreur": "Aucune image archivée pour ce jour.", "jour": jour.isoformat()},
+                            status=404)
+
+    fin = dernier.instant
+    selection = list(produits.filter(instant__gt=fin - timedelta(hours=heures), instant__lte=fin)
+                     .order_by("instant"))
+
+    cle = f"{source}_{fin:%Y%m%dT%H%MZ}_{round(heures * 60)}min_{len(selection)}.json.gz"
+    cache = dossier("cache", "animation")
+    chemin = cache / cle
+
+    if not chemin.exists():
+        trames = []
+        for produit in selection:
+            try:
+                with np.load(absolu(produit.fichier)) as champs:
+                    octets = encoder_trame(source, {k: champs[k] for k in champs.files})
+            except (FileNotFoundError, KeyError, ValueError):
+                continue   # archive purgée ou incomplète : l'image manque, sans être inventée
+            trames.append({
+                "instant": produit.instant.astimezone(Fuseau.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "donnees": base64.b64encode(octets).decode("ascii"),
+            })
+
+        if not trames:
+            return JsonResponse({"erreur": "Les images de cette période ont été purgées."}, status=404)
+
+        contenu = {
+            "version": 1,
+            "source": source,
+            "jour": jour.isoformat(),
+            "grille": grille.description(),
+            "pas_minutes": 5 if source == "radar" else 10,
+            "encodage": encoder_trame.__doc__.strip(),
+            "attribution": ANIMATION_ATTRIBUTIONS[source],
+            "trames": trames,
+        }
+        ecrire_atomique(chemin, gzip.compress(json.dumps(contenu, separators=(",", ":")).encode(), 6))
+
+        # On ne garde que les boucles les plus récentes de cette source
+        anciens = sorted(cache.glob(f"{source}_*.json.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for ancien in anciens[12:]:
+            ancien.unlink(missing_ok=True)
+
+    reponse = HttpResponse(chemin.read_bytes(), content_type="application/json; charset=utf-8")
+    reponse["Content-Encoding"] = "gzip"
+    reponse["Cache-Control"] = "public, max-age=60" if jour == aujourdhui else "public, max-age=86400"
+    return reponse
+
+def api_geocolour(request):
+    """Liste des observations GeoColour pour une journée."""
+
+    from datetime import date, datetime, timedelta, timezone as UTC
+    from zoneinfo import ZoneInfo
+    from django.urls import reverse
+    from .sources.commun import dossier_publication
+
+    paris = ZoneInfo("Europe/Paris")
+    aujourdhui = datetime.now(paris).date()
+
+    try:
+        jour = date.fromisoformat(
+            request.GET.get("jour", aujourdhui.isoformat())
+        )
+    except ValueError:
+        return JsonResponse(
+            {"erreur": "Date incorrecte."}, status=400
+        )
+
+    repertoire = dossier_publication("geocolour")
+    limite = datetime.now(UTC.utc) - timedelta(days=7)
+    trames = []
+
+    for fichier in sorted(repertoire.glob("geocolour_*.webp")):
+        try:
+            instant = datetime.strptime(
+                fichier.stem,
+                "geocolour_%Y%m%dT%H%MZ"
+            ).replace(tzinfo=UTC.utc)
+        except ValueError:
+            continue
+
+        if request.GET.get("dernier") != "1":
+            if instant < limite:
+                continue
+
+            if instant.astimezone(paris).date() != jour:
+                continue
+
+        trames.append({
+            "instant": instant.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "url": reverse(
+                "meteo_app:fichier_geocolour",
+                kwargs={"nom": fichier.name}
+            ),
+        })
+
+    secours = None
+
+    for fichier in sorted(
+        repertoire.glob("geocolour_*.webp"),
+        reverse=True
+    ):
+        try:
+            instant = datetime.strptime(
+                fichier.stem,
+                "geocolour_%Y%m%dT%H%MZ"
+            ).replace(tzinfo=UTC.utc)
+        except ValueError:
+            continue
+
+        secours = {
+            "instant": instant.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "url": reverse(
+                "meteo_app:fichier_geocolour",
+                kwargs={"nom": fichier.name}
+            ),
+        }
+        break
+
+    if request.GET.get("dernier") == "1":
+        trames = trames[-1:]
+
+    reponse = JsonResponse({
+        "version": 1,
+        "source": "geocolour",
+        "jour": jour.isoformat(),
+        "pas_minutes": 10,
+        "attribution": (
+            "EUMETSAT / NASA - Traitement visuel HKO"
+        ),
+        "trames": trames,
+        "secours": secours,
+    })
+
+    reponse["Cache-Control"] = "no-cache"
+    return reponse
+
+
+def fichier_geocolour(request, nom):
+    """Sert une observation satellite GeoColour."""
+
+    from django.http import FileResponse, Http404
+    from .sources.commun import dossier_publication
+
+    if not re.fullmatch(
+        r"geocolour_\d{8}T\d{4}Z\.webp", nom
+    ):
+        raise Http404("Fichier inconnu.")
+
+    chemin = dossier_publication("geocolour") / nom
+
+    try:
+        fichier = chemin.open("rb")
+    except FileNotFoundError:
+        raise Http404("Image indisponible.")
+
+    reponse = FileResponse(
+        fichier, content_type="image/webp"
+    )
+    reponse["Cache-Control"] = (
+        "public, max-age=86400, immutable"
+    )
+
+    return reponse

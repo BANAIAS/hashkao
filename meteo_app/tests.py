@@ -522,3 +522,92 @@ class ApiTests(DossierTemporaire, TestCase):
         reponse = Client().get("/meteo/api/etat/")
         self.assertEqual(reponse.status_code, 200)
         self.assertIn("radar", reponse.json()["sources"])
+
+
+# ---------------------------------------------------------------------------
+# Animations radar et satellite
+# ---------------------------------------------------------------------------
+
+class AnimationTests(DossierTemporaire, TestCase):
+    """Boucles d'animation servies à partir des grilles archivées."""
+
+    def archiver(self, source, instant, **champs):
+        from meteo_app.sources import stockage
+        return stockage.enregistrer_grille(source, "observation", instant, champs)
+
+    def lire(self, reponse):
+        self.assertEqual(reponse["Content-Encoding"], "gzip")
+        return json.loads(gzip.decompress(reponse.content))
+
+    def demander(self, parametres, aujourdhui=INSTANT.date()):
+        from unittest import mock
+        from django.utils import timezone as tz
+        with mock.patch.object(tz, "localdate", return_value=aujourdhui):
+            return Client().get("/meteo/api/animation/" + parametres)
+
+    def test_encodage_radar(self):
+        from meteo_app.views import encoder_trame
+        champs = {"intensite": plein(1.0), "pluie": plein(0.5), "couverture": plein(1.0)}
+        champs["intensite"][0, 0] = np.nan       # cellule sans mesure : pas de pluie
+        octets = encoder_trame("radar", champs)
+        n = forme()[0] * forme()[1]
+        self.assertEqual(len(octets), 2 * n)
+        self.assertEqual(octets[1], 40)            # 40 × log2(1 + 1 mm/h)
+        self.assertEqual(octets[0], 0)
+        self.assertEqual(octets[n + 1], (8 << 4) | 15)   # pluie 0,5 -> 8/15 ; couverture 1 -> 15
+
+    def test_encodage_satellite(self):
+        from meteo_app.views import encoder_trame
+        champs = {"opaque": plein(1.0), "partiel": plein(0.0), "neige": plein(0.0), "valide": plein(1.0)}
+        octets = encoder_trame("satellite", champs)
+        n = forme()[0] * forme()[1]
+        self.assertEqual(octets[0], 15 << 4)
+        self.assertEqual(octets[n], 15)
+
+    def test_source_inconnue(self):
+        self.assertEqual(self.demander("?source=arome").status_code, 400)
+
+    def test_jour_a_venir_refuse(self):
+        reponse = self.demander("?source=radar&jour=2026-11-20")
+        self.assertEqual(reponse.status_code, 404)
+        self.assertIn("venir", reponse.json()["erreur"])
+
+    def test_aucune_archive(self):
+        self.assertEqual(self.demander("?source=satellite").status_code, 404)
+
+    def test_boucle_du_jour(self):
+        for k in range(4):
+            self.archiver("radar", INSTANT - timedelta(minutes=5 * k),
+                          intensite=plein(k), pluie=plein(0.5), couverture=plein(1.0))
+        # Image trop ancienne pour la boucle de 3 h demandée par défaut
+        self.archiver("radar", INSTANT - timedelta(hours=5),
+                      intensite=plein(1), pluie=plein(1), couverture=plein(1))
+
+        contenu = self.lire(self.demander("?source=radar"))
+        self.assertEqual(contenu["source"], "radar")
+        self.assertEqual(len(contenu["trames"]), 4)
+        self.assertEqual(contenu["trames"][-1]["instant"], "2026-11-17T14:55:00Z")
+        self.assertEqual(contenu["grille"]["nx"], forme()[1])
+
+        # Deuxième demande : servie depuis le cache, identique
+        self.assertEqual(self.lire(self.demander("?source=radar")), contenu)
+
+    def test_archive_purgee_ignoree(self):
+        from meteo_app.sources.commun import absolu
+        produits = [self.archiver("satellite", INSTANT - timedelta(minutes=10 * k),
+                                  opaque=plein(0.5), partiel=plein(0.2), neige=plein(0), valide=plein(1))
+                    for k in range(3)]
+        absolu(produits[1].fichier).unlink()
+        contenu = self.lire(self.demander("?source=satellite"))
+        self.assertEqual(len(contenu["trames"]), 2)   # l'image manquante n'est pas inventée
+
+    def test_jour_passe_jusqua_16h(self):
+        veille = datetime(2026, 11, 16, 15, 0, tzinfo=timezone.utc)   # 16 h à Paris
+        for k in range(3):
+            self.archiver("radar", veille - timedelta(minutes=5 * k),
+                          intensite=plein(0), pluie=plein(0), couverture=plein(1))
+        self.archiver("radar", veille + timedelta(hours=3),
+                      intensite=plein(0), pluie=plein(0), couverture=plein(1))
+        with override_settings(TIME_ZONE="Europe/Paris"):
+            contenu = self.lire(self.demander("?source=radar&jour=2026-11-16"))
+        self.assertEqual(contenu["trames"][-1]["instant"], "2026-11-16T15:00:00Z")

@@ -6,11 +6,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#06203f">
     <title>HKO Météo — la France observée en temps réel</title>
-    <meta name="description" content="Températures, précipitations radar et conditions météo en France, à partir des mesures de Météo-France.">
+    <meta name="description" content="Températures, précipitations radar, conditions météo et vue satellite de la France, à partir des mesures de Météo-France et d'EUMETSAT.">
     <link rel="stylesheet" href="{% static 'meteo_app/css/hko.css' %}">
 </head>
 
 <body>
+
+<svg width="0" height="0"
+     style="position:absolute" aria-hidden="true">
+    <defs>
+        <filter id="correction-satellite"
+                color-interpolation-filters="sRGB">
+
+            <feColorMatrix type="matrix" values="
+                1.02 0    0    0 0
+                0    0.96 0    0 0
+                0    0    1.04 0 0
+                0    0    0    1 0"/>
+
+            <feConvolveMatrix
+                order="3"
+                kernelMatrix="
+                     0   -0.2  0
+                    -0.2  1.8 -0.2
+                     0   -0.2  0"
+                preserveAlpha="true"/>
+        </filter>
+    </defs>
+</svg>
 
 <!-- Séquence d'ouverture : visible pendant le chargement réel du premier tableau -->
 <div id="intro" role="status" aria-live="polite">
@@ -45,23 +68,63 @@
 
 <main
     id="scene"
-    data-tableau="temperatures"
+    data-tableau="satellite"
     data-api-carte="{% url 'meteo_app:api_carte' %}"
     data-api-conditions="{% url 'meteo_app:api_conditions' %}"
+    data-api-animation="{% url 'meteo_app:api_animation' %}"
     data-radar="{% url 'meteo_app:fichier_radar' 'radar.json' %}"
     data-statique="{% get_static_prefix %}meteo_app/"
 >
-    <!-- Carte : fond en relief, champ de températures, radar, tracés -->
-    <canvas id="fond" aria-hidden="true"></canvas>
+    <!-- Un fond par tableau : seul celui du tableau affiché est visible -->
+    <canvas id="fond-temperatures" class="fond" aria-hidden="true"></canvas>
+    <canvas id="fond-precipitations" class="fond" aria-hidden="true"></canvas>
+    <canvas id="fond-conditions" class="fond" aria-hidden="true"></canvas>
+    <canvas id="fond-satellite" class="fond" aria-hidden="true"></canvas>
+
+    <!-- Données : températures, nuages observés, radar -->
     <canvas id="champ" class="couche" aria-hidden="true"></canvas>
-    <canvas id="ciel" class="couche" aria-hidden="true"></canvas>
-    <div id="anim-pluie" class="couche anim" aria-hidden="true"></div>
-    <div id="anim-neige" class="couche anim" aria-hidden="true"></div>
-    <div id="anim-brume" class="couche anim" aria-hidden="true"></div>
+    <canvas id="gl-satellite" class="couche" aria-hidden="true"></canvas>
+    <canvas id="gl-radar" class="couche" aria-hidden="true"></canvas>
     <img id="radar" class="couche" alt="" aria-hidden="true">
     <canvas id="hachures" class="couche" aria-hidden="true"></canvas>
+
     <svg id="traits" role="img" aria-labelledby="titre-tableau soustitre-tableau">
+        <defs>
+            <radialGradient id="p-soleil" cx="38%" cy="34%" r="72%">
+                <stop offset="0" stop-color="#fff7bd"/>
+                <stop offset="0.45" stop-color="#ffd43f"/>
+                <stop offset="1" stop-color="#f29312"/>
+            </radialGradient>
+            <radialGradient id="p-halo">
+                <stop offset="0.42" stop-color="#ffd84a" stop-opacity="0.5"/>
+                <stop offset="1" stop-color="#ffd84a" stop-opacity="0"/>
+            </radialGradient>
+            <linearGradient id="p-lune" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#fffbe6"/>
+                <stop offset="1" stop-color="#dfd39e"/>
+            </linearGradient>
+            <linearGradient id="p-nuage-blanc" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#ffffff"/>
+                <stop offset="0.6" stop-color="#f2f5f9"/>
+                <stop offset="1" stop-color="#cdd6e2"/>
+            </linearGradient>
+            <linearGradient id="p-nuage-gris" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#e6eaf0"/>
+                <stop offset="0.6" stop-color="#bcc5d0"/>
+                <stop offset="1" stop-color="#909cab"/>
+            </linearGradient>
+            <linearGradient id="p-nuage-sombre" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#a7b0bb"/>
+                <stop offset="0.6" stop-color="#6f7a88"/>
+                <stop offset="1" stop-color="#4a5462"/>
+            </linearGradient>
+            <linearGradient id="p-goutte" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#a6e3ff"/>
+                <stop offset="1" stop-color="#1b80dd"/>
+            </linearGradient>
+        </defs>
         <g id="calque-temperatures" class="couche"></g>
+        <g id="calque-radar" class="couche"></g>
         <g id="calque-conditions" class="couche"></g>
     </svg>
 
@@ -97,17 +160,40 @@
             <div id="legende"></div>
         </section>
 
-        <nav class="tableaux" aria-label="Tableaux météo">
-            <button type="button" data-tableau="temperatures" aria-pressed="true">Températures</button>
-            <button type="button" data-tableau="precipitations" aria-pressed="false">Précipitations</button>
-            <button type="button" data-tableau="conditions" aria-pressed="false">Conditions<span class="suite"> météo</span></button>
-            <button type="button" id="lecture" class="lecture" aria-label="Mettre le défilement en pause">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path class="icone-pause" d="M8 5v14M16 5v14"/>
-                    <path class="icone-lecture" d="M8 5l11 7-11 7z"/>
-                </svg>
-            </button>
-        </nav>
+        <div class="commandes">
+            <!-- Frise des animations radar et satellite -->
+            <div id="frise" class="frise" hidden>
+                <button type="button" id="frise-lecture" class="frise-lecture" aria-label="Mettre l'animation en pause">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path class="icone-pause" d="M8 5v14M16 5v14"/>
+                        <path class="icone-lecture" d="M8 5l11 7-11 7z"/>
+                    </svg>
+                </button>
+                <div class="frise-piste">
+                    <div class="frise-reperes" id="frise-reperes" aria-hidden="true"></div>
+                    <input type="range" id="frise-curseur" min="0" max="1000" step="1" value="1000"
+                           aria-label="Heure affichée">
+                    <div class="frise-heures" id="frise-heures" aria-hidden="true"></div>
+                </div>
+                <p class="frise-temps" aria-live="off">
+                    <span id="frise-heure">&nbsp;</span>
+                    <span id="frise-nature">&nbsp;</span>
+                </p>
+            </div>
+
+            <nav class="tableaux" aria-label="Tableaux météo">
+                <button type="button" data-tableau="satellite" aria-pressed="true">Satellite</button>
+                <button type="button" data-tableau="temperatures" aria-pressed="false"><span class="long">Températures</span><span class="court" aria-hidden="true">Temp.</span></button>
+                <button type="button" data-tableau="precipitations" aria-pressed="false"><span class="long">Précipitations</span><span class="court" aria-hidden="true">Pluie</span></button>
+                <button type="button" data-tableau="conditions" aria-pressed="false">Conditions<span class="suite"> météo</span></button>
+                <button type="button" id="lecture" class="lecture" aria-label="Mettre le défilement en pause"></button>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path class="icone-pause" d="M8 5v14M16 5v14"/>
+                        <path class="icone-lecture" d="M8 5l11 7-11 7z"/>
+                    </svg>
+                </button>
+            </nav>
+        </div>
     </footer>
 
     <div id="bulle" hidden></div>
@@ -120,6 +206,7 @@
 </noscript>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="{% static 'meteo_app/js/hko_anime.js' %}"></script>
 <script src="{% static 'meteo_app/js/hko.js' %}"></script>
 
 </body>

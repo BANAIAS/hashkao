@@ -37,6 +37,13 @@ urlpatterns = [
     path("api/conditions/", views.api_conditions, name="api_conditions"),
     path("api/etat/", views.api_etat, name="api_etat"),
 
+    # Boucles d'animation radar et satellite (grilles archivées)
+    path("api/animation/", views.api_animation, name="api_animation"),
+
     # Fichiers radar publiés par collecter_radar
     path("donnees/radar/<str:nom>", views.fichier_radar, name="fichier_radar"),
+
+    # Images satellite GeoColour
+    path("api/geocolour/", views.api_geocolour, name="api_geocolour"),
+    path("donnees/geocolour/<str:nom>", views.fichier_geocolour, name="fichier_geocolour"),
 ]
