@@ -171,25 +171,20 @@ class Command(BaseCommand):
                 if chemin.suffix == ".zip" and not options["garder_brut"]:
                     nc.unlink(missing_ok=True)
         else:
-            from meteo_app.sources import stockage
-
-            for instant, produit in produits_recents(options["rattrapage"]):
-                if self.nouveautes >= options["maximum"]:
-                    break
-                if instant and stockage.existe("satellite", instant.replace(microsecond=0)):
-                    details["ignores"].append(str(produit))
-                    continue
-                nc = None
+            def traiter_archive(archive):
+                nc = extraire_netcdf(archive, brut)
                 try:
-                    nc = telecharger_netcdf(produit, brut)
                     self.nouveautes += self.traiter(nc, details)
-                except ErreurSatellite as erreur:
-                    details["erreurs"].append(f"{produit} : {erreur}")
-                except Exception as erreur:  # réseau, archive incomplète : on passe au suivant
-                    details["erreurs"].append(f"{produit} : {type(erreur).__name__} {erreur}")
                 finally:
-                    if nc is not None and not options["garder_brut"]:
+                    if not options["garder_brut"]:
                         Path(nc).unlink(missing_ok=True)
+
+            try:
+                telecharger_eumdac_cli(traiter_archive)
+            except Exception as erreur:
+                details["erreurs"].append(
+                    f"EUMDAC : {type(erreur).__name__} {erreur}"
+                )
 
         if self.nouveautes:
             suivi.succes(f"{self.nouveautes} produit(s) traité(s) : {', '.join(details['traites'])}", **details)
@@ -197,3 +192,45 @@ class Command(BaseCommand):
             suivi.echec("; ".join(details["erreurs"])[:900], **details)
         else:
             suivi.rien_de_neuf("Aucun nouveau produit.", **details)
+
+def telecharger_eumdac_cli(traitement):
+    """Télécharge le dernier produit MTG avec les jetons OAuth2 EUMDAC."""
+    import os
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(
+        prefix="eumdac_", dir=dossier("brut", "satellite")
+    ) as repertoire:
+        environnement = os.environ.copy()
+        environnement["EUMDAC_HOME"] = "/var/lib/hko-eumdac"
+        environnement["EUMDAC_REQUEST_MAX_RETRIES"] = "0"
+
+        commande = [
+            "/opt/hashkao/env/bin/eumdac",
+            "download",
+            "-c", COLLECTION,
+            "--sort", "ingestion",
+            "--desc",
+            "--limit", "1",
+            "-o", repertoire,
+            "-y",
+            "-t", "1",
+            "--no-progress-bars",
+        ]
+
+        subprocess.run(
+            commande,
+            env=environnement,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        archives = list(Path(repertoire).glob("*.zip"))
+        if not archives:
+            raise CommandError("EUMDAC n'a téléchargé aucune archive ZIP.")
+
+        # Le ZIP doit être traité avant la suppression du dossier temporaire.
+        return traitement(archives[0])

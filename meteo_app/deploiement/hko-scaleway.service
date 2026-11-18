@@ -1,0 +1,15 @@
+[Unit]
+Description=HKO Météo - %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/opt/hashkao
+Environment=DJANGO_SETTINGS_MODULE=hashkao.settings.prod
+Environment=MPLCONFIGDIR=/tmp
+EnvironmentFile=/etc/hashkao.env
+ExecStart=/opt/hashkao/env/bin/python manage.py %i
+TimeoutStartSec=25min
+Nice=10
