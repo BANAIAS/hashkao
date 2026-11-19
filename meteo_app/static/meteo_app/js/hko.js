@@ -1266,15 +1266,21 @@ function placerTemperatures() {
 // publiée en pleine résolution (1 km), fondue par-dessus si elle correspond
 // à la dernière grille.
 // ---------------------------------------------------------------------------
+const MODE_OPERA =
+    new URLSearchParams(window.location.search).get("opera") !== "0";
 
 async function chargerRadar() {
     // Fichiers publiés par collecter_radar ; à défaut, l'ancien emplacement
     // dans static (radar converti à la main avec convertir_radar).
     let base = scene.dataset.radar.replace(/radar\.json$/, "");
 
+    if (MODE_OPERA) {
+        base = base.replace(/radar\/$/, "opera/");
+    }
+
     try {
         let reponse = await fetch(base + "radar.json", { cache: "no-store" });
-        if (reponse.status === 404) {
+        if (reponse.status === 404 && !MODE_OPERA) {
             base = STATIQUE + "radar/";
             reponse = await fetch(base + "radar.json", { cache: "no-store" });
         }
@@ -1986,9 +1992,11 @@ async function chargerAnimation(source, jour) {
 
     let resultat;
     try {
-        const url = source === "satellite"
-            ? `/meteo/api/geocolour/?jour=${encodeURIComponent(jour)}`
-            : `${URL_ANIMATION}?source=${source}&jour=${encodeURIComponent(jour)}`;
+        const url = MODE_OPERA && source === "radar"
+            ? `${URL_ANIMATION}?source=opera&jour=${encodeURIComponent(jour)}`
+            : source === "satellite"
+                ? `/meteo/api/geocolour/?jour=${encodeURIComponent(jour)}`
+                : `${URL_ANIMATION}?source=${source}&jour=${encodeURIComponent(jour)}`;
 
         const reponse = await fetch(url);
         if (!reponse.ok) {
@@ -1996,6 +2004,16 @@ async function chargerAnimation(source, jour) {
             resultat = { absente: true, motif: corps.erreur || `Erreur ${reponse.status}` };
         } else {
             const donnees = await reponse.json();
+
+            if (MODE_OPERA && source === "radar" && donnees.jour !== jour) {
+                const absente = {
+                    absente: true,
+                    motif: "Observation OPERA indisponible pour ce jour.",
+                    recu: Date.now()
+                };
+                cache.set(jour, absente);
+                return absente;
+            }
 
             if (source === "satellite") {
                 resultat = {
@@ -2035,6 +2053,48 @@ function creerRenduGeocolour() {
     let demande = null;
     let affichee = null;
 
+    const cacheImages = new Map();
+    const MAX_IMAGES = 3;
+
+    function imageEnCache(url) {
+        if (cacheImages.has(url)) {
+            return cacheImages.get(url);
+        }
+
+        const promesse = chargerImage(url)
+            .then(async image => {
+                if (image.decode) {
+                    await image.decode();
+                }
+                return image;
+            })
+            .catch(erreur => {
+                if (cacheImages.get(url) === promesse) {
+                    cacheImages.delete(url);
+                }
+                throw erreur;
+            });
+
+        cacheImages.set(url, promesse);
+
+        while (cacheImages.size > MAX_IMAGES) {
+            const ancienne = cacheImages.keys().next().value;
+            cacheImages.delete(ancienne);
+        }
+
+        return promesse;
+    }
+
+    function precharger(sequence, index) {
+        for (let i = 1; i <= 2; i++) {
+            const suivante = sequence.trames[index + i];
+
+            if (suivante) {
+                imageEnCache(suivante.url).catch(() => {});
+            }
+        }
+    }
+
     return {
         sequence: null,
 
@@ -2042,6 +2102,7 @@ function creerRenduGeocolour() {
             this.sequence = sequence;
             demande = null;
             affichee = null;
+            cacheImages.clear();
         },
 
         situation(instant) {
@@ -2074,7 +2135,7 @@ function creerRenduGeocolour() {
             const requete = {};
             demande = requete;
 
-            chargerImage(trame.url)
+            imageEnCache(trame.url)
                 .then(image => {
                     if (this.sequence !== sequence ||
                         etat.jour !== jour ||
@@ -2088,6 +2149,10 @@ function creerRenduGeocolour() {
 
                     etat.fondsAJour.delete("satellite");
                     assurerFond("satellite");
+
+                    if (lecteur.lecture) {
+                        precharger(sequence, s.avant);
+                    }
                 })
                 .catch(erreur => {
                     console.warn("GeoColour :", erreur);
@@ -2116,6 +2181,9 @@ function rendu(source) {
 
 // Prépare l'animation du tableau affiché (ou du suivant, en avance)
 async function preparerAnimation(source) {
+
+
+
     const jour = etat.jour;
     if (!jour || !etat.donnees || etat.donnees.type === "prevision") return null;
 
@@ -2212,7 +2280,7 @@ function dessinerAnimation() {
         // Image pleine résolution par-dessus la dernière grille, si elle lui correspond
         const s = r.situation(lecteur.instant);
         const derniere = s && s.observee && s.avant === lecteur.sequence.trames.length - 1;
-        const hd = derniere && radarDuJour() &&
+        const hd = !MODE_OPERA && derniere && radarDuJour() &&
             Date.parse(etat.radar.date_utc) === lecteur.sequence.trames.at(-1).ms;
         scene.classList.toggle("radar-hd", Boolean(hd));
 
@@ -2263,8 +2331,8 @@ function majFrise() {
         ? heureParis(sequence.trames[s.avant].instant)
         : heureParis(new Date(lecteur.instant).toISOString());
     const nature = s.observee ? "Observation"
-        : s.lacune ? "Image manquante : fondu entre deux observations"
-        : "Image calculée entre deux observations";
+        : s.lacune ? "Lacune"
+        : "Interpolation";
 
     const cle = heure + nature;
     if (cle !== majFrise.derniere) {
@@ -2427,10 +2495,12 @@ function legendeRadar(animation) {
     const hors = animation || etat.radarCouverture
         ? `<div class="note-legende"><span class="hachure-exemple"></span>Hachures : zone sans mesure radar</div>`
         : "";
-    const source = `<div class="attributions">Radar : Météo-France</div>`;
+    const source = MODE_OPERA
+        ? `<div class="attributions">Radar : EUMETNET OPERA — <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a> — Données reprojetées et colorisées par HKO Météo</div>`
+        : `<div class="attributions">Radar : Météo-France</div>`;
 
-    return `<div class="classes" aria-label="Intensité en ${echapper(unite)}">${classes}<span style="min-width:0;padding-left:6px">${echapper(unite)}</span></div>${hors}${source}`;
-}
+        return `<div class="classes" aria-label="Intensité en ${echapper(unite)}">${classes}<span style="min-width:0;padding-left:6px">${echapper(unite)}</span></div>${hors}${source}`;
+    }
 
 function habillageConditions(carte) {
     const p = carte.provenance || {};
@@ -2588,11 +2658,22 @@ function actualiserHabillage() {
         titre = "Précipitations";
         const animation = sequenceDuJour("radar");
         if (animation && etat.rendus.radar) {
-            sousTitre = `Pluie mesurée par les radars Météo-France, de ${heureParis(animation.trames[0].instant)} ` +
-                `à ${heureParis(animation.trames.at(-1).instant)}. Pas une prévision.`;
+            const origine = MODE_OPERA
+                ? "les radars européens OPERA"
+                : "les radars Météo-France";
+
+            const debut = heureParis(animation.trames[0].instant);
+            const fin = heureParis(animation.trames.at(-1).instant);
+
+            const periode = debut === fin
+                ? `à ${debut}`
+                : `de ${debut} à ${fin}`;
+
+            sousTitre = `Intensité des précipitations d'après ${origine}, ${periode}. Pas une prévision.`;
+
             legende = legendeRadar(true);
         } else if (radarDuJour()) {
-            sousTitre = `Image radar Météo-France de ${heureParis(etat.radar.date_utc)}. ` +
+            sousTitre = `Image radar ${MODE_OPERA ? "EUMETNET OPERA" : "Météo-France"} de ${heureParis(etat.radar.date_utc)}. ` +
                 "Pluie mesurée, pas une prévision.";
             legende = legendeRadar(false);
         } else if (d && d.type !== "prevision" &&
@@ -2799,8 +2880,17 @@ function reglerLecture(actif) {
 async function chargerJour(jour, cleProgression) {
     const enCache = jour && etat.jours.get(jour);
 
-    if (enCache && Date.now() - enCache.recu < RAFRAICHISSEMENT) return enCache;
-    if (enCache && enCache.jour !== enCache.aujourdhui && enCache.disponible) return enCache;
+    const maintenant = jourParis(new Date());
+
+    if (enCache && enCache.aujourdhui === maintenant) {
+        if (Date.now() - enCache.recu < RAFRAICHISSEMENT) {
+            return enCache;
+        }
+
+        if (enCache.jour < maintenant && enCache.disponible) {
+            return enCache;
+        }
+    }
 
     const url = jour ? `${URL_API}?jour=${encodeURIComponent(jour)}` : URL_API;
     const donnees = await lireJson(await telecharger(url, cleProgression));
@@ -2910,10 +3000,22 @@ function installerCommandes() {
         }, 250);
     }).observe(scene);
 
-    // Nouvelles observations du jour, sans recharger la page
+    // Nouvelles observations et changement automatique de journée
     setInterval(async () => {
         const d = etat.donnees;
-        if (document.hidden || !d || etat.jour !== d.aujourdhui) return;
+
+        if (document.hidden || !d) return;
+
+        const maintenant = jourParis(new Date());
+
+        // Passage à minuit en heure de Paris
+        if (etat.jour === d.aujourdhui && maintenant !== d.aujourdhui) {
+            await allerAuJour(maintenant);
+            return;
+        }
+
+        // Respecter la consultation volontaire d'une autre journée
+        if (etat.jour !== maintenant) return;
         try {
             const frais = await chargerJour(etat.jour);
             if (frais.date !== d.date && etat.jour === frais.jour) {
@@ -2924,6 +3026,7 @@ function installerCommandes() {
             }
         } catch (erreur) { /* on réessaiera au prochain passage */ }
         chargerRadar();
+        chargerImageSatellite();
         if (etat.tableau === "conditions") preparerConditions();
         if (sourceAffichee()) preparerAnimation(sourceAffichee());
     }, RAFRAICHISSEMENT);
@@ -3025,11 +3128,22 @@ async function demarrer() {
     etat.relief = await promesseRelief;
     etat.bathymetrie = await promesseBathymetrie;
 
-    await attendreImage();
-    assurerFond("temperatures");
-    progresser("fond", 1);
-
     installerDonnees(await promesseObservations);
+
+    await attendreImage();
+
+    if (etat.tableau === "satellite") {
+        await Promise.all([
+            chargerImageSatellite(),
+            preparerAnimation("satellite")
+        ]);
+
+        assurerFond("satellite");
+    } else {
+        assurerFond(etat.tableau);
+    }
+
+    progresser("fond", 1);
 
     await attendreImage();
     dessinerChamp();

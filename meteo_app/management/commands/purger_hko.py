@@ -47,7 +47,14 @@ from meteo_app.sources.commun import (
 
 PARIS = ZoneInfo("Europe/Paris")
 
-BRUT = {"radar": timedelta(hours=6), "satellite": timedelta(hours=3), "arome": timedelta(hours=12)}
+BRUT = {
+    "radar": timedelta(hours=6),
+    "opera": timedelta(hours=6),
+    "satellite": timedelta(hours=3),
+    "arome": timedelta(hours=12),
+}
+
+CONSERVATION_OPERA = timedelta(days=30)
 GRILLES_OBSERVATION = timedelta(days=30)
 AROME_COURT, AROME_LONG = timedelta(days=3), timedelta(days=30)
 FUSION_TOUTES, FUSION_HORAIRE = timedelta(hours=48), timedelta(days=30)
@@ -74,6 +81,7 @@ class Command(BaseCommand):
                     a = maintenant()
                     self.fichiers_bruts(a)
                     self.grilles_observation(a)
+                    self.grilles_opera(a)
                     self.grilles_arome(a)
                     self.cartes(a)
                     self.observations(a)
@@ -172,6 +180,51 @@ class Command(BaseCommand):
         tampon = io.BytesIO()
         np.savez_compressed(tampon, mosaiques=np.int32(nombre), **champs)
         ecrire_atomique(cible, tampon.getvalue())
+
+    def grilles_opera(self, a):
+        """Purge des archives et animations OPERA anciennes."""
+
+        from datetime import date
+        from meteo_app.models import ProduitMeteo
+
+        limite = a - CONSERVATION_OPERA
+        jour_limite = limite.astimezone(PARIS).date()
+
+        anciens = ProduitMeteo.objects.filter(
+            source="opera",
+            nature="observation",
+            instant__lt=limite,
+        )
+
+        for produit in anciens.iterator():
+            jour = produit.instant.astimezone(PARIS).date()
+
+            if jour < jour_limite:
+                self.supprimer_produit(
+                    produit,
+                    "grilles OPERA",
+                )
+
+        publication = dossier("publication", "opera")
+
+        for chemin in publication.glob("animation_*.json.gz"):
+
+            nom = chemin.name
+            texte = nom.removeprefix(
+                "animation_"
+            ).removesuffix(".json.gz")
+
+            try:
+                jour = date.fromisoformat(texte)
+            except ValueError:
+                continue
+
+            if jour < jour_limite:
+                self.bilan["animations OPERA"] += 1
+                self.octets += chemin.stat().st_size
+
+                if not self.simulation:
+                    chemin.unlink(missing_ok=True)
 
     def grilles_arome(self, a):
         from meteo_app.models import ProduitMeteo

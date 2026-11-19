@@ -211,9 +211,15 @@ def lire_mosaique(chemin_h5):
     if debut and fin and fin > debut:
         periode_minutes = (fin - debut).total_seconds() / 60
 
-    if periode_minutes:
-        valeur *= 60 / periode_minutes   # cumul sur la période -> intensité horaire
+    if quantite == "RATE":
+        # OPERA : intensité déjà exprimée en mm/h
         unite = "mm/h"
+
+    elif quantite == "ACRR" and periode_minutes:
+        # Météo-France : cumul converti en intensité horaire
+        valeur *= 60 / periode_minutes
+        unite = "mm/h"
+
     else:
         unite = "mm"
 
@@ -398,7 +404,12 @@ def convertir(chemin_h5, dossier_sortie=None, largeur_image=2000,
         "source": Path(chemin_h5).name,
         "ecart_coins_m": round(m["ecart_coins_max"], 1),
         "radars_absents": m["radars_absents"],
-        "attribution": "Source : Météo-France",
+        "attribution": (
+            "Source : EUMETNET OPERA — CC BY 4.0 — "
+            "Données reprojetées et colorisées par HKO Météo"
+            if m["quantite"] == "RATE"
+            else "Source : Météo-France"
+        ),
     }
 
     # Le fichier de description est écrit en dernier : le navigateur ne

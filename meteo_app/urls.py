@@ -43,6 +43,8 @@ urlpatterns = [
     # Fichiers radar publiés par collecter_radar
     path("donnees/radar/<str:nom>", views.fichier_radar, name="fichier_radar"),
 
+    path("donnees/opera/<str:nom>", views.fichier_opera, name="fichier_opera"),
+
     # Images satellite GeoColour
     path("api/geocolour/", views.api_geocolour, name="api_geocolour"),
     path("donnees/geocolour/<str:nom>", views.fichier_geocolour, name="fichier_geocolour"),

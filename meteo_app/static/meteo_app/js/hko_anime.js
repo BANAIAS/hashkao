@@ -265,6 +265,13 @@ vec4 sur(vec4 dessous, vec3 couleur, float alpha) {
     return vec4(couleur * alpha + dessous.rgb * (1.0 - alpha), alpha + dessous.a * (1.0 - alpha));
 }
 `;
+// Paramètres expérimentaux du rendu OPERA
+const RADAR_OPERA =
+    new URLSearchParams(window.location.search).get("opera") !== "0";
+
+const OPERA_LISSAGE = 1.50;
+const OPERA_TRANSITION = 0.30;
+const OPERA_OPACITE = 0.85;
 
 const RADAR = COMMUN + `
 uniform vec3 uCouleurs[10];
@@ -276,17 +283,59 @@ void main() {
     vec2 uv = g / uCellules;
     float dedans = dansGrille(g, 8.0);
 
+
     vec4 f = dedans > 0.0 ? echantillon(uv) : vec4(0.0);
     float mmh = exp2(f.r * 255.0 / 40.0) - 1.0;
     float pluie = f.g;
     float couverture = f.b;
 
+    ${RADAR_OPERA ? `
+    if (dedans > 0.0 && couverture > 0.5) {
+        vec2 d = vec2(${OPERA_LISSAGE.toFixed(3)}) / uCellules;
+
+        vec4 voisins[4];
+        voisins[0] = echantillon(uv + vec2(d.x, 0.0));
+        voisins[1] = echantillon(uv - vec2(d.x, 0.0));
+        voisins[2] = echantillon(uv + vec2(0.0, d.y));
+        voisins[3] = echantillon(uv - vec2(0.0, d.y));
+
+        float somme = mmh * 4.0;
+        float sommePluie = pluie * 4.0;
+        float poids = 4.0;
+
+        for (int j = 0; j < 4; j++) {
+            vec4 v = voisins[j];
+            if (v.b > 0.5) {
+                somme += exp2(v.r * 255.0 / 40.0) - 1.0;
+                sommePluie += v.g;
+                poids += 1.0;
+            }
+        }
+
+        mmh = somme / poids;
+        pluie = sommePluie / poids;
+    }
+    ` : ""}
+
+
     // Couleur par classe, transitions courtes pour garder des contours nets
     vec3 c = uCouleurs[0];
     for (int i = 1; i < 10; i++) {
-        c = mix(c, uCouleurs[i], smoothstep(uSeuils[i] * 0.93, uSeuils[i] * 1.07, mmh));
+        c = mix(c, uCouleurs[i], smoothstep(
+            uSeuils[i] * ${RADAR_OPERA ? (1 - OPERA_TRANSITION).toFixed(3) : "0.93"},
+            uSeuils[i] * ${RADAR_OPERA ? (1 + OPERA_TRANSITION).toFixed(3) : "1.07"},
+            mmh
+        ));
     }
-    float alpha = smoothstep(0.12, 0.42, pluie) * smoothstep(0.12, 0.2, mmh) * 0.94;
+    float alpha = ${RADAR_OPERA
+        ? "smoothstep(0.20, 0.75, pluie)"
+        : "smoothstep(0.12, 0.42, pluie)"}
+        * smoothstep(0.12, 0.2, mmh)
+        * ${RADAR_OPERA ? OPERA_OPACITE.toFixed(3) : "0.94"};
+
+    ${RADAR_OPERA ? `
+    alpha *= smoothstep(0.5, 0.9, couverture);
+    ` : ""}
 
     vec4 res = vec4(0.0);
 

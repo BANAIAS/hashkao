@@ -36,6 +36,7 @@ TACHES = [
     # (nom, commande, arguments, période en minutes, décalage en minutes)
     ("stations", "collecter_observations", [], 6, 2),
     ("radar", "collecter_radar", [], 5, 3),
+    ("opera", "collecter_opera", [], 5, 4),
     ("satellite", "collecter_satellite", [], 10, 6),
     ("arome", "collecter_arome", [], 30, 20),
     ("etat", "etat_hko", [], 15, 11),

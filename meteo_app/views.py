@@ -112,7 +112,9 @@ def _creneau_du_jour(jour, aujourdhui):
     du_jour = ObservationMeteo.objects.filter(date__gte=debut, date__lt=fin)
 
     if jour == aujourdhui:
-        return du_jour.aggregate(v=Max("date"))["v"]
+        return ObservationMeteo.objects.filter(
+            date__lte=timezone.now()
+        ).aggregate(v=Max("date"))["v"]
 
     cible = debut + timedelta(hours=HEURE_REFERENCE)
 
@@ -458,10 +460,12 @@ def api_conditions(request):
         produit = _produit_du_jour("fusion", "prevision", jour)
         motif = "Aucune prévision AROME n'est encore disponible pour ce jour."
     elif jour == aujourdhui:
-        produit = ProduitMeteo.objects.filter(source="fusion", nature="observation").order_by("-instant").first()
-        if produit and timezone.localtime(produit.instant).date() != jour:
-            produit = None
-        motif = "Aucune carte des conditions n'a encore été calculée aujourd'hui."
+        produit = ProduitMeteo.objects.filter(
+            source="fusion",
+            nature="observation",
+            instant__lte=timezone.now(),
+        ).order_by("-instant").first()
+        motif = "Aucune carte des conditions n'est disponible."
     else:
         produit = _produit_du_jour("fusion", "observation", jour)
         motif = "Aucune carte des conditions n'a été archivée pour ce jour."
@@ -504,6 +508,39 @@ def fichier_radar(request, nom):
     return reponse
 
 
+def fichier_opera(request, nom):
+    """Sert les fichiers publiés du radar européen OPERA."""
+
+    from django.http import FileResponse, Http404
+    from .sources.commun import dossier_publication
+
+    if nom not in ("animation.json", "animation.json.gz") and not FICHIERS_RADAR.fullmatch(nom):
+        raise Http404("Fichier inconnu.")
+
+    chemin = dossier_publication("opera") / nom
+
+    if not chemin.is_file():
+        raise Http404("Fichier absent.")
+
+    comprime = nom == "animation.json.gz"
+
+    reponse = FileResponse(
+        open(chemin, "rb"),
+        content_type=(
+            "application/json"
+            if nom.endswith(".json") or comprime
+            else "image/png"
+        )
+    )
+
+    if comprime:
+        reponse["Content-Encoding"] = "gzip"
+
+    reponse["Cache-Control"] = "no-cache"
+
+    return reponse
+
+
 def api_etat(request):
     """Fraîcheur de chaque source (surveillance et habillage de la carte)."""
     from .sources.surveillance import etat_des_sources
@@ -516,7 +553,11 @@ def api_etat(request):
 # ---------------------------------------------------------------------------
 
 # Durée d'animation demandée par défaut et bornes acceptées (heures)
-ANIMATION_HEURES = {"radar": 3.0, "satellite": 4.0}
+ANIMATION_HEURES = {
+    "radar": 3.0,
+    "satellite": 4.0,
+    "opera": 3.0,
+}
 ANIMATION_HEURES_MAX = 6.0
 
 # Pour un jour passé, la boucle se termine à cette heure locale
@@ -525,6 +566,7 @@ ANIMATION_FIN_JOUR_PASSE = 16
 ANIMATION_ATTRIBUTIONS = {
     "radar": "Radar : Météo-France",
     "satellite": "Satellite : contient des données EUMETSAT Meteosat modifiées",
+    "opera": "EUMETNET OPERA — CC BY 4.0 — Données reprojetées et colorisées par HKO Météo",
 }
 
 
@@ -546,7 +588,7 @@ def encoder_trame(source, champs):
     """
     import numpy as np
 
-    if source == "radar":
+    if source in ("radar", "opera"):
         intensite = np.nan_to_num(champs["intensite"].astype(np.float32), nan=0.0)
         plan1 = np.clip(np.round(np.log2(1 + np.maximum(intensite, 0)) * 40), 0, 254).astype(np.uint8)
         plan2 = (_quart(champs["pluie"]) << 4) | _quart(champs["couverture"])
@@ -580,12 +622,15 @@ def api_animation(request):
     from django.utils import timezone
 
     from .models import ProduitMeteo
-    from .sources import grille
+    from .sources import grille, opera
     from .sources.commun import absolu, dossier, ecrire_atomique
 
     source = request.GET.get("source")
     if source not in ANIMATION_HEURES:
-        return JsonResponse({"erreur": "source doit valoir « radar » ou « satellite »."}, status=400)
+        return JsonResponse(
+            {"erreur": "source doit valoir « radar », « opera » ou « satellite »."},
+            status=400,
+        )
 
     try:
         heures = float(request.GET.get("heures", ANIMATION_HEURES[source]))
@@ -607,7 +652,9 @@ def api_animation(request):
     produits = ProduitMeteo.objects.filter(source=source, nature="observation")
     debut_jour = timezone.make_aware(DateTime.combine(jour, Heure(0, 0)))
     if jour == aujourdhui:
-        dernier = produits.filter(instant__gte=debut_jour).order_by("-instant").first()
+        dernier = produits.filter(
+            instant__lte=timezone.now()
+        ).order_by("-instant").first()
     else:
         limite = timezone.make_aware(DateTime.combine(jour, Heure(ANIMATION_FIN_JOUR_PASSE, 0)))
         dernier = produits.filter(instant__gte=debut_jour, instant__lte=limite).order_by("-instant").first()
@@ -620,7 +667,7 @@ def api_animation(request):
     selection = list(produits.filter(instant__gt=fin - timedelta(hours=heures), instant__lte=fin)
                      .order_by("instant"))
 
-    cle = f"{source}_{fin:%Y%m%dT%H%MZ}_{round(heures * 60)}min_{len(selection)}.json.gz"
+    cle = f"{source}_{jour.isoformat()}_{fin:%Y%m%dT%H%MZ}_{round(heures * 60)}min_{len(selection)}.json.gz"
     cache = dossier("cache", "animation")
     chemin = cache / cle
 
@@ -642,10 +689,10 @@ def api_animation(request):
 
         contenu = {
             "version": 1,
-            "source": source,
+            "source": "radar" if source == "opera" else source,
             "jour": jour.isoformat(),
-            "grille": grille.description(),
-            "pas_minutes": 5 if source == "radar" else 10,
+            "grille": opera.description() if source == "opera" else grille.description(),
+            "pas_minutes": {"radar": 5, "satellite": 10, "opera": 15}[source],
             "encodage": encoder_trame.__doc__.strip(),
             "attribution": ANIMATION_ATTRIBUTIONS[source],
             "trames": trames,

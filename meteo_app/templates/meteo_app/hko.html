@@ -1,4 +1,5 @@
 {% load static %}
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -7,7 +8,7 @@
     <meta name="theme-color" content="#06203f">
     <title>HKO Météo — la France observée en temps réel</title>
     <meta name="description" content="Températures, précipitations radar, conditions météo et vue satellite de la France, à partir des mesures de Météo-France et d'EUMETSAT.">
-    <link rel="stylesheet" href="{% static 'meteo_app/css/hko.css' %}">
+    <link rel="stylesheet" href="{% static 'meteo_app/css/hko.css' %}?v=71e5b73">
 </head>
 
 <body>
@@ -206,8 +207,8 @@
 </noscript>
 
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-<script src="{% static 'meteo_app/js/hko_anime.js' %}"></script>
-<script src="{% static 'meteo_app/js/hko.js' %}"></script>
+<script src="{% static 'meteo_app/js/hko_anime.js' %}?v=71e5b73"></script>
+<script src="{% static 'meteo_app/js/hko.js' %}?v=71e5b73"></script>
 
 </body>
 </html>
