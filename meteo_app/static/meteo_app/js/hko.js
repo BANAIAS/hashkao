@@ -42,6 +42,7 @@ const TABLEAUX = ["satellite", "temperatures", "precipitations", "conditions"];
 const DUREE_TABLEAU = 15000;        // défilement automatique
 const REPRISE_AUTO = 60000;         // après un choix manuel
 const RAFRAICHISSEMENT = 6 * 60000; // nouvelles observations du jour
+const RAFRAICHISSEMENT_SATELLITE = 30000;
 
 // Cadre géographique à faire tenir à l'écran : la France métropolitaine
 const CADRE_FRANCE = {
@@ -71,11 +72,11 @@ const PALETTE_TEMPERATURE = [
 // profondeur (0 abysses, 1 plateau continental), force de l'ombrage.
 const STYLES_RELIEF = {
     temperatures: {
-        terre: [[0, "#90b3d2"], [300, "#9fbedb"], [800, "#b3cbe3"], [1500, "#cddcee"],
-                [2500, "#e7f0f9"], [3500, "#fbfdff"]],
-        sansRelief: [144, 179, 210],
+        terre: [[0, "#608fbe"], [300, "#6899c8"], [800, "#76a3d0"], [1500, "#85afd8"],
+                [2500, "#96bcdf"], [3500, "#aacbe7"]],
+        sansRelief: [96, 143, 190],
         mer: [[0, "#0b2f63"], [0.6, "#14457f"], [1, "#2a6aaa"]],
-        ombre: 1.7, ombreMin: 0.45, ombreMax: 1.38,
+        ombre: 1.5, ombreMin: 0.45, ombreMax: 1.18,
         vignette: 0.32
     },
     precipitations: {
@@ -1987,8 +1988,17 @@ async function chargerAnimation(source, jour) {
     const cache = etat.animations[source];
     const connue = cache.get(jour);
     const aujourdhui = etat.donnees && etat.donnees.aujourdhui;
-    if (connue && (connue.absente ? Date.now() - connue.recu < 60000 :
-        jour !== aujourdhui || Date.now() - connue.recu < 3 * 60000)) return connue;
+
+    const dureeCache = source === "satellite"
+        ? RAFRAICHISSEMENT_SATELLITE
+        : 3 * 60000;
+
+    if (connue && (connue.absente
+        ? Date.now() - connue.recu < 60000
+        : jour !== aujourdhui ||
+          Date.now() - connue.recu < dureeCache)) {
+        return connue;
+    }
 
     let resultat;
     try {
@@ -2036,10 +2046,18 @@ async function chargerAnimation(source, jour) {
     // Même séquence qu'avant : on garde celle déjà envoyée au rendu
     if (connue && !connue.absente && !resultat.absente &&
         connue.trames.length === resultat.trames.length &&
-        connue.trames.at(-1).ms === resultat.trames.at(-1).ms) {
+        connue.trames.every((trame, i) =>
+            trame.ms === resultat.trames[i].ms)) {
         connue.recu = resultat.recu;
         return connue;
     }
+
+    if (source === "satellite" &&
+        resultat.absente && connue && !connue.absente) {
+        connue.recu = Date.now();
+        return connue;
+    }
+
     cache.set(jour, resultat);
     return resultat;
 }
@@ -2099,10 +2117,16 @@ function creerRenduGeocolour() {
         sequence: null,
 
         charger(sequence) {
+            const memeJour = this.sequence &&
+                this.sequence.jour === sequence.jour;
+
             this.sequence = sequence;
             demande = null;
-            affichee = null;
-            cacheImages.clear();
+
+            if (!memeJour) {
+                affichee = null;
+                cacheImages.clear();
+            }
         },
 
         situation(instant) {
@@ -2181,9 +2205,6 @@ function rendu(source) {
 
 // Prépare l'animation du tableau affiché (ou du suivant, en avance)
 async function preparerAnimation(source) {
-
-
-
     const jour = etat.jour;
     if (!jour || !etat.donnees || etat.donnees.type === "prevision") return null;
 
@@ -2191,14 +2212,49 @@ async function preparerAnimation(source) {
     if (etat.jour !== jour) return null;
 
     const r = rendu(source);
-    if (r && !sequence.absente && r.sequence !== sequence) {
-        r.charger(sequence);
-        if (lecteur.source === source) lecteur.instant = sequence.trames.at(-1).ms;
+
+    if (source === "satellite" && sequence.absente) {
+        return null;
     }
+
+    if (r && !sequence.absente && r.sequence !== sequence) {
+
+        const conserverLecture =
+            source === "satellite" &&
+            lecteur.source === source &&
+            lecteur.sequence &&
+            lecteur.sequence.jour === jour;
+
+        if (conserverLecture) {
+            const ancienneFin = lecteur.sequence.trames.at(-1).ms;
+            const suivaitDirect =
+                !lecteur.lecture && lecteur.instant >= ancienneFin;
+
+            r.charger(sequence);
+            lecteur.sequence = sequence;
+
+            const debut = sequence.trames[0].ms;
+            const fin = sequence.trames.at(-1).ms;
+
+            lecteur.instant = suivaitDirect
+                ? fin
+                : Math.max(debut, Math.min(fin, lecteur.instant));
+
+            construireFrise(sequence);
+        } else {
+            r.charger(sequence);
+
+            if (lecteur.source === source) {
+                lecteur.instant = sequence.trames.at(-1).ms;
+            }
+        }
+    }
+
     if (sourceAffichee() === source) {
         demarrerLecture(source);
         actualiserHabillage();
     }
+
     return sequence;
 }
 
@@ -3026,10 +3082,42 @@ function installerCommandes() {
             }
         } catch (erreur) { /* on réessaiera au prochain passage */ }
         chargerRadar();
-        chargerImageSatellite();
+
+        if (etat.tableau !== "satellite") {
+            chargerImageSatellite();
+        }
+
         if (etat.tableau === "conditions") preparerConditions();
-        if (sourceAffichee()) preparerAnimation(sourceAffichee());
+
+        if (sourceAffichee() === "radar") {
+            preparerAnimation("radar");
+        }
     }, RAFRAICHISSEMENT);
+
+    // Actualisation légère des observations satellite
+    let actualisationSatelliteEnCours = false;
+
+    setInterval(async () => {
+        if (document.hidden ||
+            etat.tableau !== "satellite" ||
+            !etat.donnees ||
+            etat.donnees.type === "prevision" ||
+            etat.jour !== jourParis(new Date()) ||
+            actualisationSatelliteEnCours) {
+            return;
+        }
+
+        actualisationSatelliteEnCours = true;
+
+        try {
+            await preparerAnimation("satellite");
+        } catch (erreur) {
+            console.warn("HKO : actualisation satellite", erreur);
+        } finally {
+            actualisationSatelliteEnCours = false;
+        }
+
+    }, RAFRAICHISSEMENT_SATELLITE);
 }
 
 function redessiner() {

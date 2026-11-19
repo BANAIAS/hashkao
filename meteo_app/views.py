@@ -232,6 +232,8 @@ def api_carte(request):
     from .conditions import classer, unite_nebulosite
     from .models import ObservationMeteo
 
+    from .sources.qualite_temperature import controler_temperatures
+
     aujourdhui = timezone.localdate()
 
     bornes = ObservationMeteo.objects.aggregate(
@@ -309,6 +311,8 @@ def api_carte(request):
         .select_related("station")
     )
 
+    anomalies_temperature = controler_temperatures(observations)
+
     unite = unite_nebulosite([o.nebulosite for o in observations])
 
     stations = []
@@ -328,7 +332,11 @@ def api_carte(request):
             "latitude": station.latitude,
             "longitude": station.longitude,
             "altitude": station.altitude,
-            "temperature": observation.temperature,
+            "temperature": (
+                None
+                if station.identifiant in anomalies_temperature
+                else observation.temperature
+            ),
             "humidite": observation.humidite,
             "vent": observation.vitesse_vent,
             "direction_vent": observation.direction_vent,
@@ -343,6 +351,7 @@ def api_carte(request):
         "motif": None if stations else "Aucune station pour ce créneau.",
         "date": creneau.isoformat(),
         "nombre_stations": len(stations),
+        "temperatures_rejetees": len(anomalies_temperature),
         "stations": stations,
         "ciel_mesure": ciel_mesure,
     })
