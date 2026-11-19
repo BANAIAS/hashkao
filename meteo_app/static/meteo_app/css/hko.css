@@ -965,15 +965,15 @@ button { font: inherit; color: inherit; }
             brightness(1.06) url(#correction-satellite);
 }
 
-/* Satellite : heure d'observation discrète sous la frise */
+/* Satellite et Précipitations : heure discrète sous la frise */
 
-[data-tableau="satellite"] .frise {
+:is([data-tableau="satellite"], [data-tableau="precipitations"]) .frise {
     grid-template-columns: auto minmax(0, 1fr);
     column-gap: 12px;
     row-gap: 2px;
 }
 
-[data-tableau="satellite"] .frise-temps {
+:is([data-tableau="satellite"], [data-tableau="precipitations"]) .frise-temps {
     grid-column: 1 / -1;
     display: flex;
     flex-direction: row-reverse;
@@ -987,13 +987,13 @@ button { font: inherit; color: inherit; }
     color: rgba(220, 233, 248, 0.65);
 }
 
-[data-tableau="satellite"] #frise-heure,
-[data-tableau="satellite"] #frise-nature {
+:is([data-tableau="satellite"], [data-tableau="precipitations"]) #frise-heure,
+:is([data-tableau="satellite"], [data-tableau="precipitations"]) #frise-nature {
     display: inline;
     font-size: 12px;
     font-weight: 400;
 }
 
-[data-tableau="satellite"] #frise-nature::after {
+:is([data-tableau="satellite"], [data-tableau="precipitations"]) #frise-nature::after {
     content: " :";
 }

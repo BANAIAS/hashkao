@@ -250,9 +250,7 @@ def api_carte(request):
         "aujourdhui": aujourdhui.isoformat(),
         "premier_jour": premier_jour.isoformat() if premier_jour else None,
         "dernier_jour": dernier_jour.isoformat() if dernier_jour else None,
-        "dernier_jour_navigable": (
-            aujourdhui + timedelta(days=JOURS_FUTURS)
-        ).isoformat(),
+        "dernier_jour_navigable": aujourdhui.isoformat(),
         "type": "observation",
         "disponible": False,
         "motif": None,

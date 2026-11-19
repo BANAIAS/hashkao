@@ -1772,7 +1772,7 @@ function placerConditions() {
     for (const [x, y] of positionsSymboles(espacement)) {
         const s = situationAutour(carte, x, y, espacement * 0.5);
         // L'étiquette est à droite : le pictogramme se décale un peu à gauche
-        if (s) symboles.push({ id: `${Math.round(x)}:${Math.round(y)}`, x: x - 12 * grandeur, y, ...s });
+        if (s) symboles.push({ id: `${Math.round(x)}:${Math.round(y)}`, x, y, ...s });
     }
 
     calque.selectAll("g.vent-fort").remove();
@@ -1784,8 +1784,7 @@ function placerConditions() {
         .attr("tabindex", 0)
         .attr("transform", d => `translate(${d.x},${d.y})`)
         .html(d => `<circle r="${26 * grandeur}" fill="transparent"/>` +
-            `<g transform="scale(${grandeur})" class="picto">${dessinSymbole(DESSIN_CATEGORIE[d.categorie], d.jour)}</g>` +
-            etiquette(d.temperature, grandeur))
+            `<g transform="scale(${grandeur})" class="picto">${dessinSymbole(DESSIN_CATEGORIE[d.categorie], d.jour)}</g>`)
         .on("pointerenter focus", (evenement, d) => montrerBulle(d, bulleConditionFusion(d, carte)))
         .on("pointerleave blur", cacherBulle);
 
@@ -1796,39 +1795,101 @@ function placerConditions() {
 // Flèches de vent fort, plutôt sur les côtes et en mer (comme à la télévision),
 // là où les rafales observées ou prévues atteignent 50 km/h.
 function placerVents(carte, espacement, grandeur, symboles = []) {
-    const g = carte.grille;
-    const candidats = [];
-    const hg = etat.projection([-6.4, 51.9]), bd = etat.projection([10.9, 40.6]);
-    const pas = Math.max(2, Math.round(espacement / 2 / ((bd[0] - hg[0]) / g.nx)));
+    const calque = d3.select("#calque-conditions");
+    calque.selectAll("g.vent-fort").remove();
 
-    for (let j = 0; j < g.ny; j += pas) {
-        for (let i = 0; i < g.nx; i += pas) {
-            const c = j * g.nx + i;
-            const r = carte.donnees.rafale[c];
-            if (r === 255 || r < 50 || carte.donnees.direction[c] === 255) continue;
-            const lon = g.ouest + (i + 0.5) * g.pas, lat = g.nord - (j + 0.5) * g.pas;
-            const [x, y] = etat.projection([lon, lat]);
-            if (x < 24 || y < 70 || x > etat.largeur - 40 || y > etat.hauteur - 40) continue;
-            if (dansFrance(x, y)) continue;   // la France porte les pictogrammes
-            if (symboles.some(s => Math.hypot(s.x - x, s.y - y) < espacement * 0.75)) continue;
-            candidats.push({ x, y, rafale: r, direction: carte.donnees.direction[c] * 2 });
-        }
-    }
+    // Ne pas mélanger observations et prévisions.
+    if (carte.mode === "prevision") return;
 
-    candidats.sort((a, b) => b.rafale - a.rafale);
+    const donnees = etat.donnees;
+    if (!donnees || !donnees.disponible ||
+        donnees.type === "prevision") return;
+
+    // Vérifier la proximité temporelle des observations.
+    const ecartMinutes = Math.abs(
+        new Date(donnees.date) - new Date(carte.instant)
+    ) / 60000;
+
+    if (!Number.isFinite(ecartMinutes) || ecartMinutes > 60) return;
+
+    const candidats = (donnees.stations || [])
+        .filter(s =>
+            Number.isFinite(s.vent) &&
+            s.vent * 3.6 >= 1 &&
+            s.vent * 3.6 <= 250 &&
+            Number.isFinite(s.direction_vent) &&
+            s.direction_vent >= 0 &&
+            s.direction_vent <= 360
+        )
+        .map(s => {
+            const [x, y] = etat.projection([
+                s.longitude, s.latitude
+            ]);
+
+            return {
+                station: s,
+                x,
+                y,
+                vitesse: Math.round(s.vent * 3.6),
+                direction: s.direction_vent
+            };
+        })
+        .filter(d =>
+            dansFrance(d.x, d.y) &&
+            symboles.every(s =>
+                Math.hypot(s.x - d.x, s.y - d.y)
+                    > espacement * 0.48
+            )
+        );
+
+    // Répartition géographique régulière.
     const retenus = [];
-    for (const c of candidats) {
-        if (retenus.length >= 8) break;
-        if (retenus.every(r => Math.hypot(r.x - c.x, r.y - c.y) > espacement * 1.6)) retenus.push(c);
+
+    for (const [x, y] of positionsSymboles(espacement * 1.35)) {
+        const proches = candidats
+            .filter(d =>
+                Math.hypot(d.x - x, d.y - y) < espacement &&
+                retenus.every(r =>
+                    Math.hypot(r.x - d.x, r.y - d.y)
+                        > espacement * 1.05
+                )
+            )
+            .sort((a, b) =>
+                Math.hypot(a.x - x, a.y - y) -
+                Math.hypot(b.x - x, b.y - y)
+            );
+
+        if (proches.length) retenus.push(proches[0]);
     }
 
-    d3.select("#calque-conditions").selectAll("g.vent-fort")
-        .data(retenus)
+    calque.selectAll("g.vent-fort")
+        .data(retenus, d => d.station.id)
         .join("g")
         .attr("class", "vent-fort")
-        .attr("transform", d => `translate(${d.x},${d.y}) scale(${grandeur})`)
-        .html(d => `<path class="vent-chevron" transform="rotate(${d.direction + 180})" d="M0-15l9 22-9-6-9 6z"/>` +
-            `<text class="vent-chiffre" x="15" y="-6">${d.rafale}</text>`);
+        .attr("transform", d =>
+            `translate(${d.x},${d.y}) scale(${grandeur * 0.85})`
+        )
+        .html(d => {
+            const couleur = d.vitesse >= 60 ? "#ffad55" :
+                            d.vitesse >= 40 ? "#ffe36b" :
+                            "#ffffff";
+
+            const fleche = d.vitesse === 0
+                ? `<circle r="5" fill="none"
+                    stroke="${couleur}" stroke-width="2"/>`
+                : `<path
+                    transform="rotate(${d.direction + 180})"
+                    d="M0 12 V-13 M-6 -6 L0 -13 6 -6"
+                    fill="none"
+                    stroke="${couleur}"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"/>`;
+
+            return fleche +
+                `<text class="vent-chiffre"
+                    x="13" y="5">${d.vitesse}</text>`;
+        });
 }
 
 function bulleConditionFusion(d, carte) {
@@ -1886,9 +1947,8 @@ function placerConditionsStations() {
         .html(d => {
             const c = d.station.condition;
             return `<circle r="${26 * grandeur}" fill="transparent"/>` +
-                `<g transform="scale(${grandeur})" class="picto">${dessinSymbole(c.code, c.jour)}</g>` +
-                etiquette(d.station.temperature, grandeur);
-        })
+                `<g transform="scale(${grandeur})" class="picto">${dessinSymbole(c.code, c.jour)}</g>`;
+                    })
         .on("pointerenter focus", (evenement, d) => montrerBulle(d, bulleCondition(d.station)))
         .on("pointerleave blur", cacherBulle);
 
@@ -2596,7 +2656,11 @@ function habillageConditions(carte) {
     const estime = carte.mode !== "prevision"
         ? `<div class="note-legende"><span class="estime-exemple"></span>Symbole estompé : estimation, sources incomplètes</div>` : "";
 
-    const legende = `<div class="cles-conditions">${symboles}</div>${estime}` +
+    const legende = `<div class="cles-conditions">${symboles}</div>` +
+        (carte.mode !== "prevision"
+            ? `<div class="note-legende">➝ Vent moyen mesuré (km/h)</div>`
+            : "") +
+        `${estime}` +
         (attributions.length ? `<div class="attributions">${echapper(attributions.join(" — "))}</div>` : "");
 
     return [sousTitre, legende];
@@ -2788,8 +2852,14 @@ function actualiserHabillage() {
         if (etat.jour === aujourdhui) libelle = `Aujourd'hui, ${libelle.toLowerCase()}`;
 
         $("jour-libelle").textContent = libelle;
-        $("jour-precedent").disabled = !d || !d.premier_jour || etat.jour <= d.premier_jour;
-        $("jour-suivant").disabled = !d || !d.dernier_jour_navigable || etat.jour >= d.dernier_jour_navigable;
+        $("jour-precedent").disabled =
+            !d || !d.premier_jour || etat.jour <= d.premier_jour;
+
+        $("jour-suivant").disabled =
+            !d || !aujourdhui || etat.jour >= aujourdhui;
+
+        $("jour-suivant").style.visibility =
+            $("jour-suivant").disabled ? "hidden" : "visible";
     }
 }
 
@@ -2966,6 +3036,7 @@ function installerDonnees(donnees) {
 let demandeJour = 0;
 
 async function allerAuJour(jour) {
+    if (jour > jourParis(new Date())) return;
     const demande = ++demandeJour;
 
     cacherBulle();
