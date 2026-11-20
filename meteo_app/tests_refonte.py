@@ -147,6 +147,23 @@ class VideoTests(AvecProfilsReduits, TestCase):
 
 
 class FichiersTests(AvecProfilsReduits, TestCase):
+    def test_api_signale_image_adaptee_absente(self):
+        # Production des dérivés en retard : la page doit savoir qu'il faut
+        # prendre l'original (sinon fond vide sur un 404 de Nginx).
+        maintenant = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        instant = maintenant.replace(minute=maintenant.minute // 10 * 10) - timedelta(minutes=20)
+        original = self.original(instant)
+        jour = derives.jour_local(instant).isoformat()
+        lire = lambda: json.loads(Client().get(f"/meteo/api/satellite/?jour={jour}&profil=leger").content)
+        donnees = lire()
+        obs = donnees["observations"][-1]
+        self.assertFalse(obs["derivee"])
+        self.assertTrue(obs["originale"].endswith(original.name))
+        self.assertFalse(donnees["secours"]["derivee"])
+        self.assertEqual(Client().get(obs["originale"]).status_code, 200)
+        derives.image_derivee(original, "leger")
+        self.assertTrue(lire()["observations"][-1]["derivee"])
+
     def test_image_fabriquee_a_la_demande(self):
         instant = datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc)
         self.original(instant)

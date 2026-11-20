@@ -2243,6 +2243,9 @@ function creerRenduSatellite() {
         surImage(trame) {
             etat.instantGeocolour = trame.instant;
             if (etat.tableau === "satellite") actualiserHabillage();
+        },
+        surErreur() {
+            if (etat.tableau === "satellite") actualiserHabillage();
         }
     });
 }
@@ -2820,6 +2823,10 @@ function etatIndisponible() {
                 "Le satellite montre les nuages observés. Les nuages prévus apparaissent dans les conditions météo."];
         }
         if (satelliteAffiche()) return null;
+        if (etat.rendus.satellite && etat.rendus.satellite.erreur) {
+            return ["Image satellite indisponible",
+                    "La dernière observation n'a pas pu être chargée. Nouvel essai automatique toutes les 30 secondes.", true];
+        }
         const sequence = etat.jour && etat.animations.satellite.get(etat.jour);
         if (!sequence || !sequence.absente) return null;          // encore en chargement
         if (sequence.reseau) return ["Satellite inaccessible", sequence.motif, true];

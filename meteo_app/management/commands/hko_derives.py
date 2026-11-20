@@ -70,23 +70,31 @@ class Command(BaseCommand):
         bilan = []
         originaux = derives.originaux_geocolour()
 
-        for jour in self.jours(options):
+        jours = self.jours(options)
+
+        # 1. Images fixes d'abord, les plus récentes en premier : c'est ce
+        #    que la page affiche à l'ouverture. Les vidéos, plus longues à
+        #    produire, viennent ensuite et ne retardent plus les images.
+        for jour in sorted(jours, reverse=True):
             du_jour = derives.observations_du_jour(jour, originaux)
             ecrire(f"{jour} : {len(du_jour)} images GeoColour")
             for profil in profils:
                 faites = 0
-                for instant, original in du_jour:
+                for instant, original in sorted(du_jour, reverse=True):
                     avant = derives.chemin_image(profil, original.name)
                     existait = avant.exists() and avant.stat().st_mtime >= original.stat().st_mtime
                     derives.image_derivee(original, profil)
                     faites += not existait
                 if faites:
                     bilan.append(f"{jour} {profil} : {faites} images")
-                if not options["sans_video"] and du_jour:
+
+        # 2. Vidéos (segments horaires modifiés seulement), puis OPERA
+        for jour in sorted(jours, reverse=True):
+            if not options["sans_video"] and derives.observations_du_jour(jour, originaux):
+                for profil in profils:
                     index = derives.assembler_jour(profil, jour, originaux, journal=ecrire)
                     if index:
                         bilan.append(f"{jour} {profil} : vidéo de {len(index['observations'])} observations")
-
             if not options["sans_opera"]:
                 bilan.extend(self.opera(jour))
         return bilan

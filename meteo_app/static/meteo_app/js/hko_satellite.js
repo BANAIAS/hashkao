@@ -14,6 +14,15 @@
    À l'arrêt (pause, curseur de la frise, journée en cours), c'est toujours
    l'image exacte de l'observation qui est affichée, nette.
 
+   Image fixe : deux sources par observation, essayées dans l'ordre.
+     1. l'image adaptée (publication/derives), légère et déjà corrigée ;
+     2. l'original GeoColour publié par le collecteur, toujours présent,
+        corrigé ici à l'affichage (même filtre que l'ancienne page).
+   Une observation récente n'a pas toujours son image adaptée (production
+   des dérivés en retard) : l'original prend alors le relais, au lieu de
+   laisser le fond vide. Un échec est mémorisé une minute (pas de boucle de
+   requêtes), puis la source est retentée.
+
    Les images reçues portent déjà la correction de couleur et de netteté
    qui était appliquée par un filtre CSS/SVG : le navigateur n'a plus ce
    calcul à refaire à chaque image. Le léger assombrissement des bords est
@@ -40,6 +49,28 @@ const VOILE_OPACITE = 0.45 * 1.05;
 
 const rvfc = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
 
+// Originaux GeoColour (collecteur) : emprise et taille fixes
+const ORIGINAL = { emprise: [-16, 34, 22, 60], largeur: 3980, hauteur: 4112 };
+const NOUVEL_ESSAI = 60000;          // une source en échec est retentée après 1 min
+
+// Correction de couleur et de netteté des originaux : exactement l'ancien
+// filtre de la page (CSS puis SVG), appliqué au seul dessin de secours.
+const FILTRE_ORIGINAL = "contrast(1.10) saturate(1.15) brightness(1.06) url(#hko-correction-satellite)";
+let filtrePret = false;
+function installerFiltre() {
+    if (filtrePret) return;
+    filtrePret = true;
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" ' +
+        'style="position:absolute;width:0;height:0" aria-hidden="true">' +
+        '<filter id="hko-correction-satellite" color-interpolation-filters="sRGB">' +
+        '<feColorMatrix type="matrix" values="1.02 0 0 0 0  0 0.96 0 0 0  0 0 1.04 0 0  0 0 0 1 0"/>' +
+        '<feConvolveMatrix order="3" kernelMatrix="0 -0.2 0 -0.2 1.8 -0.2 0 -0.2 0" divisor="1" edgeMode="duplicate"/>' +
+        '</filter></svg>';
+    document.body.insertAdjacentHTML("beforeend", svg);
+}
+const filtreCanvas = typeof CanvasRenderingContext2D !== "undefined" &&
+    "filter" in CanvasRenderingContext2D.prototype;
+
 function yMercator(lat) {
     return Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
 }
@@ -51,12 +82,15 @@ function creer(options) {
     const ctx = toile.getContext("2d");
     let sequence = null;
     let affichee = null;          // url de l'image posée sur la toile
-    let demandee = null;
-    let jeton = 0;
+    let demandee = null;          // { url, promesse } : chargement en cours
+    let voulue = null;            // url de l'observation à montrer (la dernière demandée)
+    let jeton = 0;                // change si la toile est recadrée ou la journée changée
+    let enErreur = false;         // l'observation voulue n'a pu être chargée d'aucune source
 
     // --- Images (décodage hors fil principal, anneau borné) ----------------
     const MAX_IMAGES = options.maxImages || 3;
-    const cache = new Map();      // url -> Promise<{ bitmap, sx, sy, sw, sh }>
+    const cache = new Map();      // url -> Promise<{ bitmap, sx, sy, sw, sh, geo, brut }>
+    const echecs = new Map();     // url -> date de l'échec
 
     function oublier(url) {
         const p = cache.get(url);
@@ -64,43 +98,57 @@ function creer(options) {
         if (p) p.then(r => r && r.bitmap.close && r.bitmap.close()).catch(() => {});
     }
 
-    // Rectangle (pixels de toile) où poser l'image entière de l'emprise
-    function cadreImage() {
+    // Sources d'une observation, dans l'ordre d'essai
+    function sources(trame) {
+        const derivee = { url: trame.image, geo: sequence, brut: false };
+        const originale = trame.originale
+            ? { url: trame.originale, geo: ORIGINAL, brut: true }
+            : null;
+        // Le serveur sait déjà que l'image adaptée n'existe pas encore
+        const liste = trame.derivee === false ? [originale, derivee] : [derivee, originale];
+        return liste.filter(Boolean);
+    }
+
+    // Rectangle (pixels de toile) où poser une image couvrant « emprise »
+    function cadreImage(emprise = sequence.emprise) {
         const k = echelle(), p = projection();
-        const [o, s, e, n] = sequence.emprise;
+        const [o, s, e, n] = emprise;
         const [x0, y0] = p([o, n]);
         const [x1, y1] = p([e, s]);
         return [x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k];
     }
 
-    function zoneVisible(largeur, hauteur) {
-        const [dx, dy, dw, dh] = cadreImage();
-        const fx = largeur / dw, fy = hauteur / dh;
+    function zoneVisible(geo) {
+        const [dx, dy, dw, dh] = cadreImage(geo.emprise);
+        const fx = geo.largeur / dw, fy = geo.hauteur / dh;
         const sx = Math.max(0, Math.floor((0 - dx) * fx) - 2);
         const sy = Math.max(0, Math.floor((0 - dy) * fy) - 2);
-        const ex = Math.min(largeur, Math.ceil((toile.width - dx) * fx) + 2);
-        const ey = Math.min(hauteur, Math.ceil((toile.height - dy) * fy) + 2);
+        const ex = Math.min(geo.largeur, Math.ceil((toile.width - dx) * fx) + 2);
+        const ey = Math.min(geo.hauteur, Math.ceil((toile.height - dy) * fy) + 2);
         return { sx, sy, sw: Math.max(1, ex - sx), sh: Math.max(1, ey - sy) };
     }
 
-    function imageEnCache(url) {
+    function imageEnCache(source) {
+        const { url, geo, brut } = source;
         if (cache.has(url)) {
             const p = cache.get(url);
             cache.delete(url);
             cache.set(url, p);            // la plus récemment utilisée en dernier
             return p;
         }
-        const seq = sequence;
+        const repere = { emprise: geo.emprise, largeur: geo.largeur, hauteur: geo.hauteur };
         const promesse = fetch(url)
             .then(r => {
                 if (!r.ok) throw new Error(`${url} : ${r.status}`);
+                const type = r.headers.get("Content-Type") || "";
+                if (type && !type.startsWith("image/")) throw new Error(`${url} : ${type}`);
                 return r.blob();
             })
             .then(async blob => {
-                const { sx, sy, sw, sh } = zoneVisible(seq.largeur, seq.hauteur);
+                const { sx, sy, sw, sh } = zoneVisible(repere);
                 // Taille utile à l'écran : inutile de garder plus de pixels
-                const [, , dw] = cadreImage();
-                const facteur = Math.min(1, dw / seq.largeur * 1.05);
+                const [, , dw] = cadreImage(repere.emprise);
+                const facteur = Math.min(1, dw / repere.largeur * 1.05);
                 const choix = { resizeWidth: Math.max(1, Math.round(sw * facteur)),
                                 resizeHeight: Math.max(1, Math.round(sh * facteur)),
                                 resizeQuality: "high" };
@@ -109,12 +157,13 @@ function creer(options) {
                     bitmap = await createImageBitmap(blob, sx, sy, sw, sh, facteur < 0.98 ? choix : undefined);
                 } catch (e) {
                     bitmap = await createImageBitmap(blob);
-                    return { bitmap, sx: 0, sy: 0, sw: seq.largeur, sh: seq.hauteur };
+                    return { bitmap, sx: 0, sy: 0, sw: repere.largeur, sh: repere.hauteur, geo: repere, brut };
                 }
-                return { bitmap, sx, sy, sw, sh };
+                return { bitmap, sx, sy, sw, sh, geo: repere, brut };
             })
             .catch(erreur => {
                 if (cache.get(url) === promesse) cache.delete(url);
+                echecs.set(url, Date.now());
                 throw erreur;
             });
         cache.set(url, promesse);
@@ -122,15 +171,41 @@ function creer(options) {
         return promesse;
     }
 
-    function poser(r) {
-        const W = toile.width, H = toile.height;
-        const [dx, dy, dw, dh] = cadreImage();
-        const fx = dw / sequence.largeur, fy = dh / sequence.hauteur;
+    // Première source qui répond (les échecs récents sont sautés)
+    async function chargerObservation(trame) {
+        const liste = sources(trame);
+        let derniere = null;
+        for (const source of liste) {
+            const echec = echecs.get(source.url);
+            if (echec && Date.now() - echec < NOUVEL_ESSAI && source !== liste.at(-1)) continue;
+            try {
+                return await imageEnCache(source);
+            } catch (erreur) {
+                derniere = erreur;
+                console.info("HKO satellite : source indisponible —", erreur.message);
+            }
+        }
+        throw derniere || new Error("aucune image pour cette observation");
+    }
+
+    function remplirFond() {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.filter = "none";
         ctx.fillStyle = FOND;
-        ctx.fillRect(0, 0, W, H);
+        ctx.fillRect(0, 0, toile.width, toile.height);
+    }
+
+    function poser(r) {
+        const [dx, dy, dw, dh] = cadreImage(r.geo.emprise);
+        const fx = dw / r.geo.largeur, fy = dh / r.geo.hauteur;
+        remplirFond();
         ctx.imageSmoothingQuality = "high";
+        if (r.brut && filtreCanvas) {
+            installerFiltre();
+            ctx.filter = FILTRE_ORIGINAL;
+        }
         ctx.drawImage(r.bitmap, dx + r.sx * fx, dy + r.sy * fy, r.sw * fx, r.sh * fy);
+        ctx.filter = "none";
     }
 
     function dessinerVoile() {
@@ -153,34 +228,53 @@ function creer(options) {
         return i;
     }
 
-    // Pose l'image exacte de l'observation (asynchrone ; la précédente reste
-    // affichée tant que la nouvelle n'est pas prête)
+    // Pose l'image exacte de l'observation. La précédente reste affichée tant
+    // que la nouvelle n'est pas prête ; un résultat devenu inutile (autre
+    // observation demandée entre-temps, recadrage, autre journée) est ignoré.
+    // Résout true si l'image demandée est à l'écran.
     function afficherImage(index, prechargement) {
         const trame = sequence.trames[index];
         if (!trame) return Promise.resolve(false);
+        voulue = trame.image;
         if (affichee === trame.image) return Promise.resolve(true);
-        if (demandee === trame.image) return demandee.promesse;
-        const seq = sequence, j = jeton;
-        const promesse = imageEnCache(trame.image).then(r => {
-            if (seq !== sequence || j !== jeton) return false;
+        if (demandee && demandee.url === trame.image) return demandee.promesse;
+        const j = jeton;
+        const promesse = chargerObservation(trame).then(r => {
+            if (j !== jeton || voulue !== trame.image) return false;
             poser(r);
             affichee = trame.image;
-            if (options.surImage) options.surImage(trame);
+            enErreur = false;
+            if (options.surImage) options.surImage(trame, r.brut);
             if (prechargement) {
                 for (let k = 1; k < MAX_IMAGES; k++) {
                     const suivante = sequence.trames[index + k];
-                    if (suivante) imageEnCache(suivante.image).catch(() => {});
+                    if (suivante) chargerObservation(suivante).catch(() => {});
                 }
             }
             return true;
         }).catch(erreur => {
-            console.warn("HKO satellite :", erreur.message);
+            console.warn("HKO satellite : image indisponible —", erreur.message);
+            if (journal) journal({ type: "satellite_image", instant: trame.instant,
+                                   message: String(erreur.message).slice(0, 160) });
+            if (j === jeton && voulue === trame.image) {
+                enErreur = affichee === null;
+                if (options.surErreur) options.surErreur(trame);
+            }
             return false;
         }).finally(() => {
-            if (demandee && demandee.url === trame.image) demandee = null;
+            if (demandee && demandee.promesse === promesse) demandee = null;
         });
         demandee = { url: trame.image, promesse };
         return promesse;
+    }
+
+    // Après un recadrage ou un changement de journée : la toile a été vidée,
+    // l'image voulue est reposée par le lecteur lui-même (pas d'attente d'un
+    // nouveau dessin venu de hko.js).
+    function reposer() {
+        if (!sequence || lectureVoulue || !voulue) return;
+        const index = sequence.trames.findIndex(t => t.image === voulue);
+        if (index >= 0) afficherImage(index, false);
     }
 
     // --- Vidéo ----------------------------------------------------------------
@@ -344,15 +438,21 @@ function creer(options) {
         get mode() { return mode; },
         // Quelque chose est à l'écran : image posée ou vidéo en lecture
         get pret() { return affichee !== null || (videoVisible && presente !== null); },
+        // Rien à l'écran et la dernière observation demandée est introuvable
+        get erreur() { return enErreur && !this.pret; },
 
         charger(nouvelle) {
             const memeJour = sequence && sequence.jour === nouvelle.jour && sequence.profil === nouvelle.profil;
             sequence = nouvelle;
-            jeton++;
             if (!memeJour) {
+                // Autre journée : plus rien de l'ancienne ne doit rester affiché
+                jeton++;
                 for (const url of [...cache.keys()]) oublier(url);
+                echecs.clear();
                 affichee = null;
                 demandee = null;
+                voulue = null;
+                remplirFond();
                 chargerVideo(null);
             }
             placerVideos();
@@ -429,7 +529,10 @@ function creer(options) {
             const v = video();
             if (!v.paused) v.pause();
             afficherImage(index, lecture).then(ok => {
-                if (ok && !lectureVoulue && videoVisible) montrerVideo(false);
+                if (lectureVoulue || !videoVisible) return;
+                // Image posée : la vidéo s'efface. Image introuvable : la
+                // vidéo ne reste que si elle montre bien cette observation.
+                if (ok || !info || presente === null || trameA(presente) !== index) montrerVideo(false);
             });
         },
 
@@ -440,6 +543,7 @@ function creer(options) {
             demandee = null;
             dessinerVoile();
             placerVideos();
+            reposer();
         },
 
         // Le tableau satellite n'est plus affiché : plus aucun décodage
@@ -454,6 +558,7 @@ function creer(options) {
             chargerVideo(null);
             for (const url of [...cache.keys()]) oublier(url);
             affichee = null;
+            voulue = null;
         },
 
         dessinerVoile

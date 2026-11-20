@@ -88,10 +88,15 @@ def api_satellite(request):
     du_jour = derives.observations_du_jour(jour, originaux)
     limite = datetime.now(timezone.utc) - timedelta(days=JOURS_CONSERVES)
 
+    # « derivee » : l'image adaptée existe déjà. Sinon (production des
+    # dérivés en retard), le navigateur prend directement l'original au lieu
+    # d'attendre un 404.
+    dossier_profil = derives.racine_derives("geocolour", profil)
     observations = [{
         "instant": instant.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "image": reverse("meteo_app:fichier_derive", args=[f"geocolour/{profil}/{chemin.name}"]),
         "originale": reverse("meteo_app:fichier_geocolour", args=[chemin.name]),
+        "derivee": (dossier_profil / chemin.name).is_file(),
     } for instant, chemin in du_jour if instant >= limite]
 
     video = None
@@ -129,6 +134,8 @@ def api_satellite(request):
         "secours": {
             "instant": dernier[0].strftime("%Y-%m-%dT%H:%M:%SZ"),
             "image": reverse("meteo_app:fichier_derive", args=[f"geocolour/{profil}/{dernier[1].name}"]),
+            "originale": reverse("meteo_app:fichier_geocolour", args=[dernier[1].name]),
+            "derivee": (dossier_profil / dernier[1].name).is_file(),
         } if dernier else None,
     }
     return reponse_json(request, contenu, cache="no-cache" if jour >= aujourdhui else "public, max-age=600")
