@@ -2407,10 +2407,9 @@ function demarrerLecture(source) {
     lecteur.sequence = sequence;
 
     if (nouvelle) {
-        if (source === "satellite") {
-            lecteur.lecture = etat.jour !== etat.donnees?.aujourdhui
-                && !reduitMouvement;
-        }
+        // Satellite : dernière observation fixe à l'ouverture.
+        // Précipitations : lecture automatique dès l'entrée dans le tableau.
+        lecteur.lecture = source === "radar" && !reduitMouvement;
         construireFrise(sequence);
         // On commence au début de la boucle (ou sur la dernière image, sans animation)
         lecteur.instant = lecteur.lecture ? sequence.trames[0].ms : sequence.trames.at(-1).ms;
@@ -2420,6 +2419,9 @@ function demarrerLecture(source) {
 
     cancelAnimationFrame(lecteur.boucle);
     lecteur.precedent = performance.now();
+    // Dessiner immédiatement, même si le satellite reste en pause.
+    lecteur.sale = true;
+    dessinerAnimation();
     lecteur.boucle = requestAnimationFrame(avancer);
 }
 
@@ -2545,9 +2547,8 @@ function majFrise() {
     const heure = s.observee
         ? heureParis(sequence.trames[s.avant].instant)
         : heureParis(new Date(lecteur.instant).toISOString());
-    const nature = s.observee ? "Observation"
-        : s.lacune ? "Lacune"
-        : "Interpolation";
+    // Un libellé stable pendant les trames interpolées.
+    const nature = "Observation";
 
     const cle = heure + nature;
     if (cle !== majFrise.derniere) {
@@ -2783,7 +2784,7 @@ function habillageSatellite(sequence) {
         : "";
 
     const sousTitre = instant
-        ? `Observation du ${date} à ${heureParis(instant)}`
+        ? `Observation du ${date}`
         : "Images satellite Meteosat";
 
     const legende =
