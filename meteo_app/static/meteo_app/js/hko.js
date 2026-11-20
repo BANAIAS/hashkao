@@ -372,9 +372,12 @@ function cadrer() {
     );
 
     // Résolution des canvas : nette sur écran dense, sans excès de pixels
+    const mobile = window.matchMedia("(pointer: coarse)").matches;
     const dpr = window.devicePixelRatio || 1;
-    const budget = Math.sqrt(2.6e6 / (etat.largeur * etat.hauteur));
-    etat.echelle = Math.max(1, Math.min(dpr, 2, budget));
+    const pixelsMax = mobile ? 1e6 : 2.6e6;
+    const budget = Math.sqrt(pixelsMax / (etat.largeur * etat.hauteur));
+
+    etat.echelle = Math.max(1, Math.min(dpr, mobile ? 1.25 : 2, budget));
 
     for (const id of [...CANVAS_2D, ...CANVAS_GL]) {
         const canvas = $(id);
@@ -611,10 +614,211 @@ function profondeurs() {
     return resultat;
 }
 
+// Ambiances horaires du fond des temperatures.
+// Multiplicateurs RVB appliques aux couleurs du relief et de la mer.
+const AMBIANCES_TEMPERATURES = [
+    { heure: 0,  terre: [0.42, 0.48, 0.66], mer: [0.38, 0.45, 0.65] },
+    { heure: 5,  terre: [0.42, 0.48, 0.66], mer: [0.38, 0.45, 0.65] },
+    { heure: 7,  terre: [1.40, 0.91, 0.76], mer: [1.10, 0.76, 0.80] },
+    { heure: 9,  terre: [0.94, 0.96, 1.03], mer: [0.92, 0.96, 1.02] },
+    { heure: 12, terre: [1, 1, 1],          mer: [1, 1, 1] },
+    { heure: 13, terre: [1, 1, 1],          mer: [1, 1, 1] },
+    { heure: 15, terre: [1.12, 1.12, 0.88], mer: [1.05, 1.08, 0.92] },
+    { heure: 18, terre: [1.40, 0.68, 0.82], mer: [1.10, 0.55, 0.78] },
+    { heure: 21, terre: [0.42, 0.48, 0.66], mer: [0.38, 0.45, 0.65] },
+    { heure: 24, terre: [0.42, 0.48, 0.66], mer: [0.38, 0.45, 0.65] }
+];
+
+// Estimation des horaires solaires au centre de la France.
+// Les horaires renvoyes sont exprimes en heure civile de Paris.
+function horairesSolaires(instant) {
+    const date = new Date(instant);
+
+    const parties = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "Europe/Paris",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+    }).formatToParts(date);
+
+    const a = Number(parties.find(p => p.type === "year").value);
+    const m = Number(parties.find(p => p.type === "month").value);
+    const j = Number(parties.find(p => p.type === "day").value);
+
+    const n = Math.round(
+        (Date.UTC(a, m - 1, j) - Date.UTC(a, 0, 1))
+        / 86400000
+    ) + 1;
+
+    const rad = Math.PI / 180;
+    const latitude = 46.6 * rad;
+    const longitude = 2.5;
+
+    const gamma = 2 * Math.PI / 365 * (n - 1);
+
+    // Equation du temps, en minutes.
+    const eqTemps = 229.18 * (
+        0.000075
+        + 0.001868 * Math.cos(gamma)
+        - 0.032077 * Math.sin(gamma)
+        - 0.014615 * Math.cos(2 * gamma)
+        - 0.040849 * Math.sin(2 * gamma)
+    );
+
+    // Declinaison du soleil.
+    const declinaison =
+        0.006918
+        - 0.399912 * Math.cos(gamma)
+        + 0.070257 * Math.sin(gamma)
+        - 0.006758 * Math.cos(2 * gamma)
+        + 0.000907 * Math.sin(2 * gamma)
+        - 0.002697 * Math.cos(3 * gamma)
+        + 0.001480 * Math.sin(3 * gamma);
+
+    const angle = Math.acos(
+        Math.cos(90.833 * rad)
+        / (Math.cos(latitude) * Math.cos(declinaison))
+        - Math.tan(latitude) * Math.tan(declinaison)
+    ) / rad;
+
+    // Decalage UTC de Paris, heure d'ete comprise.
+    const midiUTC = new Date(Date.UTC(a, m - 1, j, 12));
+
+    const heureParis = Number(
+        new Intl.DateTimeFormat("fr-FR", {
+            timeZone: "Europe/Paris",
+            hour: "2-digit",
+            hourCycle: "h23"
+        }).formatToParts(midiUTC)
+            .find(p => p.type === "hour").value
+    );
+
+    const decalage = heureParis - 12;
+
+    const midi = (
+        720 - 4 * longitude - eqTemps
+    ) / 60 + decalage;
+
+
+
+    return {
+        lever: midi - angle / 15,
+        midi: midi,
+        coucher: midi + angle / 15
+    };
+}
+
+function ambianceTemperatures(instant) {
+    const date = new Date(instant);
+
+    const parties = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "Europe/Paris",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+    }).formatToParts(date);
+
+    const h = Number(parties.find(p => p.type === "hour").value);
+    const m = Number(parties.find(p => p.type === "minute").value);
+    const heure = h + m / 60;
+
+    const { lever, midi, coucher } = horairesSolaires(date);
+
+
+
+    // Correspondance entre les horaires solaires reels
+    // et les reperes de notre palette artistique.
+    const reperes = [
+        [0, 0],
+        [lever - 1.5, 5],
+        [lever, 7],
+        [lever + (midi - lever) * 0.4, 9],
+        [midi - 0.5, 12],
+        [midi + 0.5, 13],
+        [midi + (coucher - midi) * 0.5, 15],
+        [coucher, 18],
+        [coucher + 1.5, 21],
+        [24, 24]
+    ];
+
+    for (let i = 1; i < reperes.length; i++) {
+        const [h0, p0] = reperes[i - 1];
+        const [h1, p1] = reperes[i];
+
+        if (heure <= h1) {
+            const t = (heure - h0) / (h1 - h0);
+            const heurePalette = p0 + (p1 - p0) * t;
+
+            return ambianceTemperaturesHeure(heurePalette);
+        }
+    }
+
+    return ambianceTemperaturesHeure(0);
+}
+
+function ambianceTemperaturesHeure(heure) {
+    if (!Number.isFinite(heure)) {
+        console.warn("Heure palette invalide :", heure);
+        heure = 12;
+    }
+
+    heure = ((heure % 24) + 24) % 24;
+
+    const i = AMBIANCES_TEMPERATURES.findIndex(
+        a => a.heure > heure
+    );
+
+    if (i <= 0) {
+        console.warn("Repere colorimetrique introuvable :", heure);
+
+        return {
+            terre: [1, 1, 1],
+            mer: [1, 1, 1]
+        };
+    }
+
+    const a = AMBIANCES_TEMPERATURES[i - 1];
+    const b = AMBIANCES_TEMPERATURES[i];
+
+    let t = (heure - a.heure) / (b.heure - a.heure);
+    t = t * t * (3 - 2 * t);
+
+    const melanger = (x, y) =>
+        x.map((v, j) => v + (y[j] - v) * t);
+
+    return {
+        terre: melanger(a.terre, b.terre),
+        mer: melanger(a.mer, b.mer)
+    };
+}
+
 // Fond en relief (températures, précipitations) : mer, puis terres ombrées
 function peindreRelief(canvas, nom) {
     preparerRelief();
     const style = STYLES_RELIEF[nom];
+
+    const heureTest = new URLSearchParams(
+        window.location.search
+    ).get("heure");
+
+    const simulation = heureTest !== null
+        && heureTest.trim() !== ""
+        && Number.isFinite(Number(heureTest))
+        && Number(heureTest) >= 0
+        && Number(heureTest) <= 24;
+
+    const ambiance = nom === "temperatures"
+        ? (
+            simulation
+                ? ambianceTemperaturesHeure(Number(heureTest))
+                : ambianceTemperatures(
+                    etat.donnees?.date || new Date()
+                )
+        )
+        : {
+            terre: [1, 1, 1],
+            mer: [1, 1, 1]
+        };
     const W = canvas.width, H = canvas.height, k = etat.echelle;
     const ctx = canvas.getContext("2d");
 
@@ -637,9 +841,9 @@ function peindreRelief(canvas, nom) {
             let t = Math.round(prof[i] / mer.pas);
             t = (t < 0 ? 0 : t >= mer.taille ? mer.taille - 1 : t) * 3;
             const v = 1 - style.vignette * Math.min(1, Math.hypot(x - cx, y - cy) / rayon) ** 2;
-            px[p] = mer.table[t] * v;
-            px[p + 1] = mer.table[t + 1] * v;
-            px[p + 2] = mer.table[t + 2] * v;
+            px[p] = mer.table[t] * v * ambiance.mer[0];
+            px[p + 1] = mer.table[t + 1] * v * ambiance.mer[1];
+            px[p + 2] = mer.table[t + 2] * v * ambiance.mer[2];
             px[p + 3] = 255;
         }
     }
@@ -663,7 +867,9 @@ function peindreRelief(canvas, nom) {
         }
         let f = 1 + (lumiere[i] - 0.7071) * style.ombre;
         f = f < style.ombreMin ? style.ombreMin : f > style.ombreMax ? style.ombreMax : f;
-        r *= f; g *= f; b *= f;
+        r *= f * ambiance.terre[0];
+        g *= f * ambiance.terre[1];
+        b *= f * ambiance.terre[2];
         pt[p] = r > 255 ? 255 : r;
         pt[p + 1] = g > 255 ? 255 : g;
         pt[p + 2] = b > 255 ? 255 : b;
@@ -2132,7 +2338,8 @@ function creerRenduGeocolour() {
     let affichee = null;
 
     const cacheImages = new Map();
-    const MAX_IMAGES = 3;
+    const mobile = window.matchMedia("(pointer: coarse)").matches;
+    const MAX_IMAGES = mobile ? 2 : 3;
 
     function imageEnCache(url) {
         if (cacheImages.has(url)) {
@@ -2164,7 +2371,7 @@ function creerRenduGeocolour() {
     }
 
     function precharger(sequence, index) {
-        for (let i = 1; i <= 2; i++) {
+        for (let i = 1; i < MAX_IMAGES; i++) {
             const suivante = sequence.trames[index + i];
 
             if (suivante) {
@@ -3028,9 +3235,15 @@ async function chargerJour(jour, cleProgression) {
 }
 
 function installerDonnees(donnees) {
+    const ancienneDate = etat.donnees?.date;
+
     etat.donnees = donnees;
     etat.jour = donnees.jour;
     etat.conditionsPretes = false;
+
+    if (ancienneDate !== donnees.date) {
+        etat.fondsAJour.delete("temperatures");
+    }
 }
 
 let demandeJour = 0;
