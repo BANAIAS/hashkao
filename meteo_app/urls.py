@@ -1,6 +1,6 @@
 
 from django.urls import path
-from . import views
+from . import views, views_ressources
 
 app_name = "meteo_app"
 
@@ -21,9 +21,10 @@ urlpatterns = [
         name="api_historique"
     ),
 
+    # Même contenu que views.api_carte, mis en cache et compressé
     path(
         "api/carte/",
-        views.api_carte,
+        views_ressources.api_carte,
         name="api_carte"
     ),
 
@@ -48,4 +49,11 @@ urlpatterns = [
     # Images satellite GeoColour
     path("api/geocolour/", views.api_geocolour, name="api_geocolour"),
     path("donnees/geocolour/<str:nom>", views.fichier_geocolour, name="fichier_geocolour"),
+
+    # Refonte technique : satellite adapté à l'appareil (images + vidéo),
+    # radar OPERA binaire, fichiers dérivés et journal du navigateur
+    path("api/satellite/", views_ressources.api_satellite, name="api_satellite"),
+    path("api/radar/", views_ressources.api_radar, name="api_radar"),
+    path("api/journal/", views_ressources.journal_client, name="journal_client"),
+    path("donnees/derives/<path:chemin>", views_ressources.fichier_derive, name="fichier_derive"),
 ]

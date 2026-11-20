@@ -1,0 +1,29 @@
+# HKO Météo — ressources dérivées (images satellite adaptées, vidéos H.264,
+# trames OPERA binaires, purge des anciens dérivés).
+#
+# Unité à part (et non hko@hko_derives) pour lui donner une priorité
+# minimale : l'encodage vidéo ne doit gêner ni les collectes ni le site.
+# Chemins repris de hko-scaleway.service (À VÉRIFIER sur le serveur :
+# utilisateur, dossier du projet, environnement virtuel, fichier d'environnement).
+
+[Unit]
+Description=HKO Météo — ressources dérivées
+After=network-online.target
+OnFailure=hko-alerte@hko_derives.service
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/opt/hashkao
+Environment=DJANGO_SETTINGS_MODULE=hashkao.settings.prod
+Environment=MPLCONFIGDIR=/tmp
+EnvironmentFile=/etc/hashkao.env
+ExecStart=/opt/hashkao/env/bin/python manage.py hko_derives
+TimeoutStartSec=30min
+# Priorité la plus basse : processeur et disque
+Nice=15
+CPUSchedulingPolicy=batch
+IOSchedulingClass=idle
+# Au plus l'équivalent d'un cœur, quoi qu'il arrive (FFmpeg compris)
+CPUQuota=100%
+MemoryMax=1500M

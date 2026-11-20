@@ -955,14 +955,33 @@ button { font: inherit; color: inherit; }
     :root { --fondu: 1ms; }
 }
 
-/* Prototype local GeoColour */
-#gl-satellite {
-    display: none !important;
+/* Satellite : vidéo de la journée (sous le voile), voile des bords.
+   La correction de couleur et de netteté est déjà dans les images (serveur) :
+   plus de filtre CSS/SVG ici. */
+#video-satellite {
+    overflow: hidden;
 }
 
-#fond-satellite {
-    filter: contrast(1.10) saturate(1.15)
-            brightness(1.06) url(#correction-satellite);
+#video-satellite video {
+    position: absolute;
+    max-width: none;
+    object-fit: fill;
+    opacity: 0;
+    background: rgb(0, 0, 20);
+}
+
+#video-satellite video.visible { opacity: 1; }
+
+#voile-satellite {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#scene[data-tableau="satellite"] #video-satellite,
+#scene[data-tableau="satellite"] #voile-satellite {
+    opacity: 1;
 }
 
 /* Satellite et Précipitations : heure discrète sous la frise */

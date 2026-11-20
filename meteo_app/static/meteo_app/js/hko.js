@@ -8,6 +8,20 @@
      Conditions      aplats de couleurs, pictogrammes
      Satellite       vue de la Terre (Blue Marble), nuages observés animés
 
+   Refonte technique (comportement et rendu inchangés) :
+     - calculs lourds (relief, mer, températures, radar) dans un Worker
+       (hko_calcul.js), résultats gardés : changer d'ambiance horaire ne
+       recalcule plus le relief ;
+     - contours projetés une fois (Path2D), redessinés par simple
+       transformation à chaque taille d'écran ;
+     - satellite : images adaptées à l'écran et vidéo H.264 (hko_satellite.js),
+       correction de couleur déjà appliquée par le serveur ;
+     - radar OPERA en trames binaires, chargées et préparées progressivement ;
+     - démarrage par le satellite, les autres tableaux préparés ensuite ;
+     - boucle d'animation arrêtée quand rien ne bouge ;
+     - reprise après perte du contexte graphique ;
+     - profils d'appareil (léger, standard, riche).
+
    Organisation du fichier :
      1. État et réglages
      2. Ouverture : chargement réel et jauge
@@ -36,7 +50,13 @@ const $ = id => document.getElementById(id);
 const URL_API = scene.dataset.apiCarte;
 const URL_CONDITIONS = scene.dataset.apiConditions;
 const URL_ANIMATION = scene.dataset.apiAnimation;
+const URL_SATELLITE = scene.dataset.apiSatellite;
+const URL_RADAR = scene.dataset.apiRadar;
+const URL_JOURNAL = scene.dataset.apiJournal;
+const SCRIPT_CALCUL = scene.dataset.scriptCalcul;
+const SCRIPT_ANIME = scene.dataset.scriptAnime;
 const STATIQUE = scene.dataset.statique;
+const PARAMETRES = new URLSearchParams(window.location.search);
 
 const TABLEAUX = ["satellite", "temperatures", "precipitations", "conditions"];
 const DUREE_TABLEAU = 15000;        // défilement automatique
@@ -130,10 +150,85 @@ const etat = {
     animations: { radar: new Map(), satellite: new Map() },   // séquences par jour
     rendus: { radar: undefined, satellite: undefined },
     pasBande: 2,
-    ouverte: false
+    ouverte: false,
+    generation: 0,          // change à chaque recadrage : résultats anciens ignorés
+    versionAmbiance: 0,     // change avec l'heure des observations (fond des températures)
+    cadreCalcul: null       // promesse : Worker prêt pour la taille d'écran courante
 };
 
 const reduitMouvement = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ---------------------------------------------------------------------------
+// Journal du navigateur : incidents envoyés au serveur (sans donnée personnelle)
+// ---------------------------------------------------------------------------
+
+let journalEnvois = 0;
+function journal(evenement) {
+    if (!URL_JOURNAL || journalEnvois >= 20) return;
+    journalEnvois++;
+    const corps = JSON.stringify({ ...evenement, profil: PROFIL.nom, page: location.pathname });
+    try {
+        if (!navigator.sendBeacon || !navigator.sendBeacon(URL_JOURNAL, new Blob([corps], { type: "application/json" }))) {
+            fetch(URL_JOURNAL, { method: "POST", body: corps, keepalive: true }).catch(() => {});
+        }
+    } catch (e) { /* le journal ne doit jamais gêner la carte */ }
+}
+
+// ---------------------------------------------------------------------------
+// Profil de l'appareil
+//
+//   léger     petite mémoire, peu de processeurs, économie de données ou
+//             connexion lente, ou page déjà trop lente sur cet appareil
+//   standard  le cas courant
+//   riche     ordinateur puissant : satellite en pleine résolution
+//
+// ?profil=leger|standard|riche force le choix (essais).
+// ---------------------------------------------------------------------------
+
+const CLE_PROFIL = "hko-profil-lent";
+
+function profilAppareil() {
+    const force = PARAMETRES.get("profil");
+    const tactile = window.matchMedia("(pointer: coarse)").matches;
+    const memoire = navigator.deviceMemory || (tactile ? 4 : 8);
+    const coeurs = navigator.hardwareConcurrency || 4;
+    const connexion = navigator.connection || {};
+    const lente = connexion.saveData || /(^|-)2g|3g/.test(connexion.effectiveType || "");
+    let rapporte = false;
+    try {
+        const v = JSON.parse(localStorage.getItem(CLE_PROFIL) || "null");
+        rapporte = Boolean(v && v.jusqua > Date.now());
+    } catch (e) { /* stockage indisponible */ }
+
+    let nom = "standard";
+    if (memoire <= 2 || coeurs <= 2 || lente || rapporte || (tactile && memoire <= 3 && coeurs <= 4)) nom = "leger";
+    else if (!tactile && memoire >= 8 && coeurs >= 8) nom = "riche";
+    if (["leger", "standard", "riche"].includes(force)) nom = force;
+    return { nom, tactile, lente: Boolean(lente) };
+}
+
+const PROFIL = profilAppareil();
+
+// Appareil trop lent pour le profil choisi : le suivant sera plus léger (7 jours)
+function surveillerLenteur() {
+    if (PROFIL.nom === "leger" || typeof PerformanceObserver === "undefined") return;
+    let lourdes = 0;
+    try {
+        const observateur = new PerformanceObserver(liste => {
+            if (!etat.ouverte) return;
+            for (const t of liste.getEntries()) if (t.duration > 400) lourdes++;
+            if (lourdes >= 4) {
+                observateur.disconnect();
+                try {
+                    localStorage.setItem(CLE_PROFIL, JSON.stringify({ jusqua: Date.now() + 7 * 86400000 }));
+                } catch (e) { /* stockage indisponible */ }
+                journal({ type: "profil_allege", lourdes });
+            }
+        });
+        observateur.observe({ type: "longtask", buffered: false });
+        setTimeout(() => observateur.disconnect(), 120000);
+    } catch (e) { /* longtask non pris en charge */ }
+}
 
 const attendreImage = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
 
@@ -150,28 +245,40 @@ function nombre(valeur, decimales = 0) {
     });
 }
 
+// Formats de date créés une seule fois (leur création est coûteuse)
+const FORMATS = {
+    heure: new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", minute: "2-digit" }),
+    jour: new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }),
+    libelle: new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }),
+    date: new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }),
+    heureMinute: new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
+    heure24: new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" })
+};
+const memoHeures = new Map();
+
 function heureParis(iso) {
-    const parties = new Intl.DateTimeFormat("fr-FR", {
-        timeZone: "Europe/Paris", hour: "numeric", minute: "2-digit"
-    }).formatToParts(new Date(iso));
+    const cle = typeof iso === "string" ? iso : new Date(iso).toISOString();
+    const connue = memoHeures.get(cle);
+    if (connue) return connue;
+    const parties = FORMATS.heure.formatToParts(new Date(iso));
 
     const h = parties.find(p => p.type === "hour").value;
     const m = parties.find(p => p.type === "minute").value;
 
-    return `${Number(h)} h ${m}`;
+    const texte = `${Number(h)} h ${m}`;
+    if (memoHeures.size > 2000) memoHeures.clear();
+    memoHeures.set(cle, texte);
+    return texte;
 }
 
 function jourParis(iso) {
     // AAAA-MM-JJ du jour civil à Paris
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" })
-        .format(new Date(iso));
+    return FORMATS.jour.format(new Date(iso));
 }
 
 function libelleJour(jour) {
     const [a, m, j] = jour.split("-").map(Number);
-    const texte = new Intl.DateTimeFormat("fr-FR", {
-        weekday: "long", day: "numeric", month: "long", timeZone: "UTC"
-    }).format(new Date(Date.UTC(a, m - 1, j)));
+    const texte = FORMATS.libelle.format(new Date(Date.UTC(a, m - 1, j)));
 
     return texte.charAt(0).toUpperCase() + texte.slice(1);
 }
@@ -349,8 +456,8 @@ function fermerIntro() {
 // ---------------------------------------------------------------------------
 
 const CANVAS_2D = ["fond-temperatures", "fond-precipitations", "fond-conditions",
-                   "fond-satellite", "champ", "hachures"];
-const CANVAS_GL = ["gl-radar", "gl-satellite"];
+                   "fond-satellite", "voile-satellite", "champ", "hachures"];
+const CANVAS_GL = ["gl-radar"];
 
 function cadrer() {
     const cadre = scene.getBoundingClientRect();
@@ -374,7 +481,7 @@ function cadrer() {
     // Résolution des canvas : nette sur écran dense, sans excès de pixels
     const mobile = window.matchMedia("(pointer: coarse)").matches;
     const dpr = window.devicePixelRatio || 1;
-    const pixelsMax = mobile ? 1e6 : 2.6e6;
+    const pixelsMax = PROFIL.nom === "leger" ? 0.75e6 : mobile ? 1e6 : 2.6e6;
     const budget = Math.sqrt(pixelsMax / (etat.largeur * etat.hauteur));
 
     etat.echelle = Math.max(1, Math.min(dpr, mobile ? 1.25 : 2, budget));
@@ -388,10 +495,10 @@ function cadrer() {
     d3.select("#traits").attr("viewBox", `0 0 ${etat.largeur} ${etat.hauteur}`);
 
     etat.fondsAJour.clear();
-    etat.altitudes = null;
-    etat.profondeurs = null;
     etat.masqueTerres = null;
-    cheminFrance = null;
+    etat.cadreCalcul = null;          // le Worker recalcule le relief à cette taille
+    etat.generation++;
+    if (etat.rendus.satellite) etat.rendus.satellite.cadrer();
 }
 
 // Largeur de la France à l'écran : sert d'unité pour les tailles de texte.
@@ -432,10 +539,39 @@ let teintesTemperature = null;
 const teintesRelief = {};
 const teintesMer = {};
 
-function tracerSurCanvas(contexte, geometrie) {
-    const chemin = d3.geoPath(etat.projection, contexte);
-    contexte.beginPath();
-    chemin(geometrie);
+// Contours projetés une seule fois, dans un repère Mercator fixe (échelle
+// 1000, sans translation). À chaque dessin, une transformation les amène à
+// la taille de l'écran : plus de reprojection D3 à chaque fois.
+const ECHELLE_CHEMINS = 1000;
+const chemins = {};
+
+function construireChemins() {
+    const unite = d3.geoMercator().scale(ECHELLE_CHEMINS).translate([0, 0]);
+    const tracer = geometrie => {
+        const chemin = new Path2D();
+        d3.geoPath(unite, chemin)(geometrie);
+        return chemin;
+    };
+    chemins.pays = tracer({ type: "FeatureCollection", features: etat.pays.features });
+    chemins.departements = tracer(etat.departements);
+    chemins.terres = new Path2D();
+    chemins.terres.addPath(chemins.pays);
+    chemins.terres.addPath(chemins.departements);
+}
+
+// Place le contexte dans le repère des chemins ; renvoie le facteur
+// (pixels de canvas par unité de chemin) pour régler les épaisseurs.
+function repereChemins(ctx) {
+    const k = etat.echelle, p = etat.projection;
+    const f = p.scale() / ECHELLE_CHEMINS;
+    const [tx, ty] = p.translate();
+    ctx.setTransform(k * f, 0, 0, k * f, k * tx, k * ty);
+    return k * f;
+}
+
+// Épaisseur de trait en pixels CSS, quelle que soit la transformation
+function epaisseur(ctx, largeur) {
+    ctx.lineWidth = largeur * etat.echelle / ctx.getTransform().a;
 }
 
 function nouveauCanvas(W, H) {
@@ -445,26 +581,18 @@ function nouveauCanvas(W, H) {
     return c;
 }
 
-function terres() {
-    return {
-        type: "FeatureCollection",
-        features: [...etat.pays.features, ...etat.departements.features]
-    };
-}
-
 // Masque des terres à la taille des canvas ; le trait referme les joints
 function masqueTerres() {
     if (etat.masqueTerres) return etat.masqueTerres;
-    const W = $("champ").width, H = $("champ").height, k = etat.echelle;
+    const W = $("champ").width, H = $("champ").height;
     const masque = nouveauCanvas(W, H);
     const cm = masque.getContext("2d");
-    cm.setTransform(k, 0, 0, k, 0, 0);
-    tracerSurCanvas(cm, terres());
+    repereChemins(cm);
     cm.fillStyle = "#000";
-    cm.fill();
-    cm.lineWidth = 0.8;
+    cm.fill(chemins.terres);
+    epaisseur(cm, 0.8);
     cm.strokeStyle = "#000";
-    cm.stroke();
+    cm.stroke(chemins.terres);
     etat.masqueTerres = masque;
     return masque;
 }
@@ -477,141 +605,141 @@ function cadreImageFond() {
     return [x0 * k, y0 * k, (x1 - x0) * k, (y1 - y0) * k];
 }
 
-// Altitude et éclairage par pixel, communs aux fonds en relief
-function preparerRelief() {
-    if (etat.altitudes) return;
+// ---------------------------------------------------------------------------
+// Calculs lourds : Worker (hko_calcul.js), ou la page à défaut
+// ---------------------------------------------------------------------------
 
-    const W = $("champ").width, H = $("champ").height, k = etat.echelle;
-    const projection = etat.projection;
-    const relief = etat.relief;
-
-    const longitudes = new Float64Array(W);
-    const latitudes = new Float64Array(H);
-    for (let x = 0; x < W; x++) longitudes[x] = projection.invert([(x + 0.5) / k, 0])[0];
-    for (let y = 0; y < H; y++) latitudes[y] = projection.invert([0, (y + 0.5) / k])[1];
-
-    const altitudes = new Float32Array(W * H).fill(NaN);
-    const lumiere = new Float32Array(W * H).fill(0.7071);
-    const fondu = new Float32Array(W * H).fill(0);
-
-    if (relief) {
-        const { largeur: gl, hauteur: gh, resolution: res, altitudes: grille } = relief;
-
-        const gx0 = new Int32Array(W), fx = new Float32Array(W);
-        for (let x = 0; x < W; x++) {
-            const g = (longitudes[x] - relief.ouest) * res - 0.5;
-            gx0[x] = Math.floor(g);
-            fx[x] = g - Math.floor(g);
+const calcul = (() => {
+    let worker = null, numero = 0, pret = null;
+    const attentes = new Map();
+    if (window.Worker && SCRIPT_CALCUL && PARAMETRES.get("worker") !== "0") {
+        try {
+            worker = new Worker(SCRIPT_CALCUL);
+            worker.onmessage = e => {
+                const a = attentes.get(e.data.id);
+                if (!a) return;
+                attentes.delete(e.data.id);
+                e.data.erreur ? a.rejeter(new Error(e.data.erreur)) : a.resoudre(e.data.resultat);
+            };
+            worker.onerror = e => {
+                console.warn("HKO : Worker indisponible —", e.message);
+                journal({ type: "worker", message: String(e.message).slice(0, 200) });
+                worker = null;
+                for (const a of attentes.values()) a.rejeter(new Error("Worker arrêté"));
+                attentes.clear();
+            };
+        } catch (e) {
+            worker = null;
         }
+    }
+    const poster = (message, transfert) => new Promise((resoudre, rejeter) => {
+        const id = ++numero;
+        attentes.set(id, { resoudre, rejeter });
+        worker.postMessage({ id, ...message }, transfert || []);
+    });
+    if (worker && SCRIPT_ANIME) pret = poster({ script: new URL(SCRIPT_ANIME, location.href).href }).catch(() => null);
 
-        for (let y = 0; y < H; y++) {
-            const g = (relief.nord - latitudes[y]) * res - 0.5;
-            const y0 = Math.floor(g), fy = g - y0;
-            if (y0 < 0 || y0 >= gh - 1) continue;
-
-            const ligne = y * W;
-
-            for (let x = 0; x < W; x++) {
-                const x0 = gx0[x];
-                if (x0 < 0 || x0 >= gl - 1) continue;
-
-                const i = y0 * gl + x0;
-                const a = grille[i], b = grille[i + 1];
-                const c = grille[i + gl], d = grille[i + gl + 1];
-
-                if (a !== a || b !== b || c !== c || d !== d) {
-                    // Bord de mer : on garde la valeur connue la plus proche
-                    const v = a === a ? a : b === b ? b : c === c ? c : d;
-                    altitudes[ligne + x] = v;
-                    continue;
-                }
-
-                const haut = a + (b - a) * fx[x];
-                const bas = c + (d - c) * fx[x];
-                altitudes[ligne + x] = haut + (bas - haut) * fy;
+    return {
+        get parallele() { return Boolean(worker); },
+        async executer(op, args, transfert) {
+            if (worker) {
+                if (pret) await pret;
+                if (worker) return poster({ op, args }, transfert);
             }
+            return window.HKOCalcul.executer(op, args);
         }
+    };
+})();
 
-        // Aux limites des données de relief, le modelé s'estompe
-        const marge = 1.2;
-        for (let y = 0; y < H; y++) {
-            const fy = Math.max(0, Math.min(1,
-                (latitudes[y] - relief.sud) / marge, (relief.nord - latitudes[y]) / marge));
-            for (let x = 0; x < W; x++) {
-                const fx2 = Math.max(0, Math.min(1,
-                    (longitudes[x] - relief.ouest) / marge, (relief.est - longitudes[x]) / marge));
-                fondu[y * W + x] = fx2 < fy ? fx2 : fy;
-            }
-        }
+// Relief chargé et lu par le Worker (le fichier pèse plusieurs mégaoctets)
+let promesseRelief = null;
+function chargerRelief() {
+    if (!promesseRelief) {
+        const urls = [STATIQUE + "relief/hko_relief.json.gz", STATIQUE + "relief/relief_europe.json.gz"]
+            .map(u => new URL(u, location.href).href);
+        promesseRelief = calcul.executer("relief", { urls })
+            .then(r => {
+                if (!r.ok) console.warn("HKO : relief indisponible —", r.erreur);
+                etat.relief = r.ok;
+                return r.ok;
+            })
+            .catch(erreur => {
+                console.warn("HKO : relief indisponible —", erreur.message);
+                return false;
+            });
     }
-
-    // Éclairage : lumière du nord-ouest, relief accentué pour rester lisible
-    const degresParPixel = longitudes[1] - longitudes[0];
-    const accent = 7;
-    const lx = -0.5, ly = 0.5, lz = 0.7071;
-
-    for (let y = 0; y < H; y++) {
-        const metresX = 111320 * Math.cos(latitudes[y] * Math.PI / 180) * degresParPixel;
-        const yh = y > 0 ? y - 1 : y, yb = y < H - 1 ? y + 1 : y;
-        const metresY = 111320 * Math.abs(latitudes[yh] - latitudes[yb]) / Math.max(1, yb - yh);
-
-        for (let x = 0; x < W; x++) {
-            const i = y * W + x;
-            const z = altitudes[i];
-            if (z !== z) continue;
-
-            const xg = x > 0 ? x - 1 : x, xd = x < W - 1 ? x + 1 : x;
-            let zg = altitudes[y * W + xg], zd = altitudes[y * W + xd];
-            let zh = altitudes[yh * W + x], zb = altitudes[yb * W + x];
-            if (zg !== zg) zg = z;
-            if (zd !== zd) zd = z;
-            if (zh !== zh) zh = z;
-            if (zb !== zb) zb = z;
-
-            const penteEst = accent * (zd - zg) / (metresX * Math.max(1, xd - xg));
-            const penteNord = accent * (zh - zb) / (metresY * Math.max(1, yb - yh));
-
-            const l = (-penteEst * lx - penteNord * ly + lz) /
-                Math.sqrt(penteEst * penteEst + penteNord * penteNord + 1);
-            // Hors des données de relief : terrain plat
-            lumiere[i] = 0.7071 + (l - 0.7071) * fondu[i];
-        }
-    }
-
-    // Ombrage sous les températures (même modelé que le fond bleuté)
-    const ombres = new Float32Array(W * H);
-    for (let i = 0; i < ombres.length; i++) {
-        const f = 1 + (lumiere[i] - 0.7071) * 1.25;
-        ombres[i] = f < 0.5 ? 0.5 : f > 1.32 ? 1.32 : f;
-    }
-
-    etat.altitudes = altitudes;
-    etat.lumiere = lumiere;
-    etat.ombres = ombres;
-    etat.fonduRelief = fondu;
+    return promesseRelief;
 }
 
-// Profondeur des mers (0 abysses .. 1 plateau ; -1 sur terre) par pixel
-function profondeurs() {
-    if (etat.profondeurs) return etat.profondeurs;
-    const W = $("champ").width, H = $("champ").height;
-    const resultat = new Float32Array(W * H).fill(0.55);
-
-    if (etat.bathymetrie) {
-        const c = nouveauCanvas(W, H);
-        const ctx = c.getContext("2d", { willReadFrequently: true });
-        ctx.fillStyle = "rgb(110,110,110)";   // au-delà de l'image : profondeur moyenne
-        ctx.fillRect(0, 0, W, H);
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(etat.bathymetrie, ...cadreImageFond());
-        const px = ctx.getImageData(0, 0, W, H).data;
-        for (let i = 0; i < resultat.length; i++) {
-            const v = px[i * 4];
-            resultat[i] = v === 0 ? 0.9 : (v - 1) / 254;   // 0 : terre dans l'image
-        }
+let promesseBathymetrie = null;
+function chargerBathymetrie() {
+    if (!promesseBathymetrie) {
+        promesseBathymetrie = fetch(STATIQUE + "fonds/bathymetrie.jpg")
+            .then(r => { if (!r.ok) throw new Error(`bathymétrie : ${r.status}`); return r.blob(); })
+            .then(blob => createImageBitmap(blob))
+            .then(async bitmap => {
+                if (!calcul.parallele || typeof OffscreenCanvas === "undefined") {
+                    etat.bathymetrie = bitmap;            // profondeurs calculées dans la page
+                    return true;
+                }
+                await calcul.executer("bathymetrie", { bitmap }, [bitmap]);
+                etat.bathymetrieTransmise = true;
+                return true;
+            })
+            .catch(erreur => {
+                console.info("HKO : fonds marins indisponibles —", erreur.message);
+                return false;
+            });
     }
-    etat.profondeurs = resultat;
+    return promesseBathymetrie;
+}
+
+// Profondeurs calculées dans la page (navigateur sans OffscreenCanvas dans les Workers)
+function profondeursPage(W, H) {
+    const resultat = new Float32Array(W * H).fill(0.55);
+    if (!etat.bathymetrie) return resultat;
+    const c = nouveauCanvas(W, H);
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "rgb(110,110,110)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(etat.bathymetrie, ...cadreImageFond());
+    const px = ctx.getImageData(0, 0, W, H).data;
+    for (let i = 0; i < resultat.length; i++) {
+        const v = px[i * 4];
+        resultat[i] = v === 0 ? 0.9 : (v - 1) / 254;
+    }
     return resultat;
+}
+
+// Prépare le Worker pour la taille d'écran courante (relief, ombrage)
+function preparerCadreCalcul() {
+    if (etat.cadreCalcul) return etat.cadreCalcul;
+    const generation = etat.generation;
+    etat.cadreCalcul = (async () => {
+        await Promise.all([chargerRelief(), chargerBathymetrie()]);
+        const W = $("champ").width, H = $("champ").height, k = etat.echelle;
+        if (!etat.bathymetrieTransmise) {
+            const profondeurs = profondeursPage(W, H);
+            await calcul.executer("bathymetrie", { profondeurs }, calcul.parallele ? [profondeurs.buffer] : undefined);
+        }
+        for (const nom of Object.keys(STYLES_RELIEF)) {
+            if (!teintesRelief[nom]) {
+                teintesRelief[nom] = tableCouleurs(STYLES_RELIEF[nom].terre, 0, 4000, 10);
+                teintesMer[nom] = tableCouleurs(STYLES_RELIEF[nom].mer, 0, 1, 0.005);
+            }
+        }
+        const p = etat.projection;
+        await calcul.executer("cadre", {
+            W, H, k, s: p.scale(), tx: p.translate()[0], ty: p.translate()[1],
+            cadreFond: cadreImageFond(),
+            styles: STYLES_RELIEF,
+            teintes: Object.fromEntries(Object.keys(STYLES_RELIEF).map(nom =>
+                [nom, { terre: teintesRelief[nom], mer: teintesMer[nom] }]))
+        });
+        return generation;
+    })();
+    return etat.cadreCalcul;
 }
 
 // Ambiances horaires du fond des temperatures.
@@ -634,12 +762,7 @@ const AMBIANCES_TEMPERATURES = [
 function horairesSolaires(instant) {
     const date = new Date(instant);
 
-    const parties = new Intl.DateTimeFormat("fr-FR", {
-        timeZone: "Europe/Paris",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-    }).formatToParts(date);
+    const parties = FORMATS.date.formatToParts(date);
 
     const a = Number(parties.find(p => p.type === "year").value);
     const m = Number(parties.find(p => p.type === "month").value);
@@ -685,11 +808,7 @@ function horairesSolaires(instant) {
     const midiUTC = new Date(Date.UTC(a, m - 1, j, 12));
 
     const heureParis = Number(
-        new Intl.DateTimeFormat("fr-FR", {
-            timeZone: "Europe/Paris",
-            hour: "2-digit",
-            hourCycle: "h23"
-        }).formatToParts(midiUTC)
+        FORMATS.heure24.formatToParts(midiUTC)
             .find(p => p.type === "hour").value
     );
 
@@ -711,12 +830,7 @@ function horairesSolaires(instant) {
 function ambianceTemperatures(instant) {
     const date = new Date(instant);
 
-    const parties = new Intl.DateTimeFormat("fr-FR", {
-        timeZone: "Europe/Paris",
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23"
-    }).formatToParts(date);
+    const parties = FORMATS.heureMinute.formatToParts(date);
 
     const h = Number(parties.find(p => p.type === "hour").value);
     const m = Number(parties.find(p => p.type === "minute").value);
@@ -792,135 +906,100 @@ function ambianceTemperaturesHeure(heure) {
     };
 }
 
-// Fond en relief (températures, précipitations) : mer, puis terres ombrées
-function peindreRelief(canvas, nom) {
-    preparerRelief();
-    const style = STYLES_RELIEF[nom];
-
-    const heureTest = new URLSearchParams(
-        window.location.search
-    ).get("heure");
-
+function ambianceDuFond(nom) {
+    if (nom !== "temperatures") return { terre: [1, 1, 1], mer: [1, 1, 1] };
+    const heureTest = PARAMETRES.get("heure");
     const simulation = heureTest !== null
         && heureTest.trim() !== ""
         && Number.isFinite(Number(heureTest))
         && Number(heureTest) >= 0
         && Number(heureTest) <= 24;
+    return simulation
+        ? ambianceTemperaturesHeure(Number(heureTest))
+        : ambianceTemperatures(etat.donnees?.date || new Date());
+}
 
-    const ambiance = nom === "temperatures"
-        ? (
-            simulation
-                ? ambianceTemperaturesHeure(Number(heureTest))
-                : ambianceTemperatures(
-                    etat.donnees?.date || new Date()
-                )
-        )
-        : {
-            terre: [1, 1, 1],
-            mer: [1, 1, 1]
-        };
-    const W = canvas.width, H = canvas.height, k = etat.echelle;
+// Toile de travail réutilisée (découpe des terres)
+let toileTravail = null;
+function travail(W, H) {
+    if (!toileTravail || toileTravail.width !== W || toileTravail.height !== H) {
+        toileTravail = nouveauCanvas(W, H);
+    }
+    const c = toileTravail.getContext("2d");
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = "source-over";
+    c.clearRect(0, 0, W, H);
+    return c;
+}
+
+function poserImage(ctx, image, x = 0, y = 0) {
+    if (image instanceof ImageData) ctx.putImageData(image, x, y);
+    else {
+        ctx.drawImage(image, x, y);
+        if (image.close) image.close();
+    }
+}
+
+// Fond en relief (températures, précipitations) : mer, halo des côtes,
+// puis terres ombrées découpées selon les côtes. Les pixels viennent du
+// Worker ; l'ambiance horaire n'y est qu'une multiplication.
+async function peindreRelief(canvas, nom) {
+    const generation = etat.generation;
+    await preparerCadreCalcul();
+    if (generation !== etat.generation) return false;
+    const { mer, terre, W, H } = await calcul.executer("fond", { nom, ambiance: ambianceDuFond(nom) });
+    if (generation !== etat.generation || W !== canvas.width || H !== canvas.height) {
+        for (const i of [mer, terre]) if (i && i.close) i.close();
+        return false;
+    }
+    const k = etat.echelle;
     const ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = "source-over";
+    poserImage(ctx, mer);
 
-    if (!teintesRelief[nom]) {
-        teintesRelief[nom] = tableCouleurs(style.terre, 0, 4000, 10);
-        teintesMer[nom] = tableCouleurs(style.mer, 0, 1, 0.005);
-    }
-    const terre = teintesRelief[nom], mer = teintesMer[nom];
-
-    const altitudes = etat.altitudes, lumiere = etat.lumiere;
-    const prof = profondeurs();
-    const image = ctx.createImageData(W, H);
-    const px = image.data;
-    const cx = W * 0.55, cy = H * 0.45, rayon = Math.hypot(W, H) * 0.62;
-
-    // La mer, d'abord partout
-    for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-            const i = y * W + x, p = i * 4;
-            let t = Math.round(prof[i] / mer.pas);
-            t = (t < 0 ? 0 : t >= mer.taille ? mer.taille - 1 : t) * 3;
-            const v = 1 - style.vignette * Math.min(1, Math.hypot(x - cx, y - cy) / rayon) ** 2;
-            px[p] = mer.table[t] * v * ambiance.mer[0];
-            px[p + 1] = mer.table[t + 1] * v * ambiance.mer[1];
-            px[p + 2] = mer.table[t + 2] * v * ambiance.mer[2];
-            px[p + 3] = 255;
-        }
-    }
-    ctx.putImageData(image, 0, 0);
-
-    // Puis les terres, ombrées, découpées selon les côtes
-    const terres2 = ctx.createImageData(W, H);
-    const pt = terres2.data;
-    const [r0, g0, b0] = style.sansRelief;
-
-    for (let i = 0; i < W * H; i++) {
-        const p = i * 4;
-        const z = altitudes[i];
-        let r = r0, g = g0, b = b0;
-
-        if (z === z) {
-            let t = Math.round((z < 0 ? 0 : z) / terre.pas);
-            if (t >= terre.taille) t = terre.taille - 1;
-            t *= 3;
-            r = terre.table[t]; g = terre.table[t + 1]; b = terre.table[t + 2];
-        }
-        let f = 1 + (lumiere[i] - 0.7071) * style.ombre;
-        f = f < style.ombreMin ? style.ombreMin : f > style.ombreMax ? style.ombreMax : f;
-        r *= f * ambiance.terre[0];
-        g *= f * ambiance.terre[1];
-        b *= f * ambiance.terre[2];
-        pt[p] = r > 255 ? 255 : r;
-        pt[p + 1] = g > 255 ? 255 : g;
-        pt[p + 2] = b > 255 ? 255 : b;
-        pt[p + 3] = 255;
-    }
-
-    const calque = nouveauCanvas(W, H);
-    const c2 = calque.getContext("2d");
-    c2.putImageData(terres2, 0, 0);
+    const c2 = travail(W, H);
+    poserImage(c2, terre);
     c2.globalCompositeOperation = "destination-in";
     c2.drawImage(masqueTerres(), 0, 0);
 
     // Halo le long des côtes
     ctx.save();
-    ctx.setTransform(k, 0, 0, k, 0, 0);
+    repereChemins(ctx);
     ctx.shadowColor = nom === "temperatures" ? "rgba(150, 205, 255, 0.5)" : "rgba(90, 120, 150, 0.35)";
     ctx.shadowBlur = (nom === "temperatures" ? 14 : 9) * k;
     ctx.fillStyle = nom === "temperatures" ? "#2a6aaa" : "#141c26";
-    tracerSurCanvas(ctx, terres());
-    ctx.fill();
+    ctx.fill(chemins.terres);
     ctx.restore();
 
-    ctx.drawImage(calque, 0, 0);
+    ctx.drawImage(toileTravail, 0, 0);
+    return true;
 }
 
-// Contour extérieur de la France : on trace tous les départements, puis on
-// efface l'intérieur ; il ne reste que le liseré.
+// Contour extérieur de la France : le trait des départements, seulement
+// à l'extérieur du territoire (découpe pair-impair : écran moins France).
 function lisereFrance(ctx, largeur, couleur) {
-    const W = ctx.canvas.width, H = ctx.canvas.height, k = etat.echelle;
-    const calque = nouveauCanvas(W, H);
-    const c2 = calque.getContext("2d");
-    c2.setTransform(k, 0, 0, k, 0, 0);
-    tracerSurCanvas(c2, etat.departements);
-    c2.lineJoin = "round";
-    c2.lineWidth = largeur;
-    c2.strokeStyle = couleur;
-    c2.stroke();
-    c2.globalCompositeOperation = "destination-out";
-    c2.fillStyle = "#000";
-    c2.fill();
-    ctx.drawImage(calque, 0, 0);
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    ctx.save();
+    const f = repereChemins(ctx);
+    const exterieur = new Path2D();
+    exterieur.rect(-ctx.getTransform().e / f, -ctx.getTransform().f / f, W / f, H / f);
+    exterieur.addPath(chemins.departements);
+    ctx.clip(exterieur, "evenodd");
+    ctx.lineJoin = "round";
+    epaisseur(ctx, largeur);
+    ctx.strokeStyle = couleur;
+    ctx.stroke(chemins.departements);
+    ctx.restore();
 }
 
-function frontieres(ctx, epaisseur, couleur) {
+function frontieres(ctx, largeur, couleur) {
     ctx.save();
-    ctx.setTransform(etat.echelle, 0, 0, etat.echelle, 0, 0);
+    repereChemins(ctx);
     ctx.lineJoin = "round";
-    tracerSurCanvas(ctx, { type: "FeatureCollection", features: etat.pays.features });
-    ctx.lineWidth = epaisseur;
+    epaisseur(ctx, largeur);
     ctx.strokeStyle = couleur;
-    ctx.stroke();
+    ctx.stroke(chemins.pays);
     ctx.restore();
 }
 
@@ -969,31 +1048,32 @@ function quadrillage(ctx) {
     ctx.restore();
 }
 
-function dessinerFondTemperatures() {
+async function dessinerFondTemperatures() {
     const canvas = $("fond-temperatures");
-    peindreRelief(canvas, "temperatures");
+    if (!await peindreRelief(canvas, "temperatures")) return false;
     const ctx = canvas.getContext("2d");
     quadrillage(ctx);
     frontieres(ctx, 0.8, "rgba(255, 255, 255, 0.5)");
     lisereFrance(ctx, 2.4, "rgba(255, 255, 255, 0.9)");
+    return true;
 }
 
-function dessinerFondPrecipitations() {
+async function dessinerFondPrecipitations() {
     const canvas = $("fond-precipitations");
-    peindreRelief(canvas, "precipitations");
+    if (!await peindreRelief(canvas, "precipitations")) return false;
     const ctx = canvas.getContext("2d");
 
     // Départements, très discrets : repères pour situer la pluie
     ctx.save();
-    ctx.setTransform(etat.echelle, 0, 0, etat.echelle, 0, 0);
-    tracerSurCanvas(ctx, etat.departements);
-    ctx.lineWidth = 0.5;
+    repereChemins(ctx);
+    epaisseur(ctx, 0.5);
     ctx.strokeStyle = "rgba(255, 255, 255, 0.11)";
-    ctx.stroke();
+    ctx.stroke(chemins.departements);
     ctx.restore();
 
     frontieres(ctx, 0.9, "rgba(255, 255, 255, 0.55)");
     lisereFrance(ctx, 1.4, "rgba(255, 255, 255, 0.78)");
+    return true;
 }
 
 // Aplats : jour (vert franc sur mer bleue) ou nuit (mêmes teintes, assombries)
@@ -1025,61 +1105,45 @@ function dessinerFondConditions() {
     ctx.fillStyle = mer;
     ctx.fillRect(0, 0, W, H);
 
-    ctx.setTransform(k, 0, 0, k, 0, 0);
+    const f = repereChemins(ctx);
+    const ty = etat.projection.translate()[1];
 
     // Pays voisins : un ton à peine plus clair que la mer
-    tracerSurCanvas(ctx, { type: "FeatureCollection", features: etat.pays.features });
     ctx.fillStyle = a.voisins;
-    ctx.fill();
-    ctx.lineWidth = 0.8;
+    ctx.fill(chemins.pays);
+    epaisseur(ctx, 0.8);
     ctx.lineJoin = "round";
     ctx.strokeStyle = a.voisinsBord;
-    ctx.stroke();
+    ctx.stroke(chemins.pays);
 
-    // France : aplat franc avec une légère profondeur
+    // France : aplat franc avec une légère profondeur (dégradé en pixels CSS,
+    // exprimé dans le repère des chemins)
     const [, yHaut] = etat.projection([2, 51.1]);
     const [, yBas] = etat.projection([2, 42.3]);
-    const vert = ctx.createLinearGradient(0, yHaut, 0, yBas);
+    const versChemin = y => (y - ty) * k / f;
+    const vert = ctx.createLinearGradient(0, versChemin(yHaut), 0, versChemin(yBas));
     vert.addColorStop(0, a.franceHaut);
     vert.addColorStop(1, a.franceBas);
 
     ctx.save();
     ctx.shadowColor = a.halo;
     ctx.shadowBlur = 18;
-    tracerSurCanvas(ctx, etat.departements);
     ctx.fillStyle = vert;
-    ctx.fill();
+    ctx.fill(chemins.departements);
     ctx.restore();
 
-    tracerSurCanvas(ctx, etat.departements);
-    ctx.lineWidth = 0.6;
+    epaisseur(ctx, 0.6);
     ctx.strokeStyle = a.departements;
-    ctx.stroke();
+    ctx.stroke(chemins.departements);
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     lisereFrance(ctx, 2.2, a.lisere);
+    return true;
 }
 
+// Le fond satellite est posé par le lecteur satellite (hko_satellite.js)
 function dessinerFondSatellite() {
-    const canvas = $("fond-satellite");
-    const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height;
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#02091a";
-    ctx.fillRect(0, 0, W, H);
-
-    if (!etat.imageSatellite) return false;
-
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(etat.imageSatellite, ...cadreImageFond());
-
-    // Léger assombrissement des bords : la France reste au centre du regard
-    const v = ctx.createRadialGradient(W * 0.52, H * 0.45, Math.min(W, H) * 0.25, W * 0.52, H * 0.45, Math.hypot(W, H) * 0.62);
-    v.addColorStop(0, "rgba(0, 4, 14, 0)");
-    v.addColorStop(1, "rgba(0, 4, 14, 0.45)");
-    ctx.fillStyle = v;
-    ctx.fillRect(0, 0, W, H);
+    if (etat.rendus.satellite) etat.rendus.satellite.dessinerVoile();
     return true;
 }
 
@@ -1090,10 +1154,29 @@ const DESSINS_FOND = {
     satellite: dessinerFondSatellite
 };
 
+// Dessine le fond d'un tableau s'il n'est pas à jour. Les fonds en relief
+// sont calculés par le Worker : la promesse se résout quand ils sont posés.
+const fondsEnCours = new Map();
 function assurerFond(tableau) {
-    if (etat.fondsAJour.has(tableau) || !etat.pays) return;
-    const fait = DESSINS_FOND[tableau]();
-    if (fait !== false) etat.fondsAJour.add(tableau);
+    if (etat.fondsAJour.has(tableau)) return Promise.resolve(true);
+    if (tableau !== "satellite" && !chemins.departements) return Promise.resolve(false);
+    const cle = `${tableau}:${etat.generation}:${etat.versionAmbiance}`;
+    if (fondsEnCours.has(cle)) return fondsEnCours.get(cle);
+    const generation = etat.generation;
+    const promesse = Promise.resolve()
+        .then(() => DESSINS_FOND[tableau]())
+        .then(fait => {
+            if (fait !== false && generation === etat.generation) etat.fondsAJour.add(tableau);
+            return fait !== false;
+        })
+        .catch(erreur => {
+            console.warn(`HKO : fond ${tableau} —`, erreur);
+            journal({ type: "fond", tableau, message: String(erreur.message || erreur).slice(0, 200) });
+            return false;
+        })
+        .finally(() => fondsEnCours.delete(cle));
+    fondsEnCours.set(cle, promesse);
+    return promesse;
 }
 
 // ---------------------------------------------------------------------------
@@ -1111,238 +1194,65 @@ function stationsValides() {
 }
 
 // Interpolation par l'inverse de la distance sur les 8 stations les plus
-// proches, avec correction d'altitude. Les stations sont rangées dans une
-// grille de cases pour ne comparer chaque point qu'à ses voisines.
-// Le résultat est une estimation entre les stations, pas une mesure.
-function calculerChamp(stations, pas) {
-    preparerRelief();
-    const projection = etat.projection;
-    const k = etat.echelle;
-    const W = $("champ").width, H = $("champ").height;
+// proches, avec correction d'altitude (calcul dans hko_calcul.js, à
+// l'identique). Le résultat est une estimation entre les stations, pas une
+// mesure. Les zones de couleur suivent l'ombrage du relief.
+let jetonChamp = 0;
 
-    const points = stations.map(s => {
-        const p = projection([s.longitude, s.latitude]);
-        return {
-            x: p[0], y: p[1], t: s.temperature,
-            a: Number.isFinite(s.altitude) ? s.altitude : NaN
-        };
-    });
-
-    if (points.length < 3) return null;
-
-    // Zone de calcul : la France à l'écran
-    const hg = projection([-5.6, 51.6]), bd = projection([10.1, 41.0]);
-    const x0 = Math.max(0, Math.floor(hg[0])), y0 = Math.max(0, Math.floor(hg[1]));
-    const x1 = Math.min(etat.largeur, Math.ceil(bd[0])), y1 = Math.min(etat.hauteur, Math.ceil(bd[1]));
-
-    if (x1 <= x0 || y1 <= y0) return null;
-
-    const colonnes = Math.ceil((x1 - x0) / pas) + 1;
-    const lignes = Math.ceil((y1 - y0) / pas) + 1;
-    const valeurs = new Float32Array(colonnes * lignes);
-
-    // Rangement des stations par cases
-    const tailleCase = Math.max(24, largeurFrance() / 22);
-    const minX = d3.min(points, p => p.x), minY = d3.min(points, p => p.y);
-    const nCasesX = Math.floor((d3.max(points, p => p.x) - minX) / tailleCase) + 1;
-    const nCasesY = Math.floor((d3.max(points, p => p.y) - minY) / tailleCase) + 1;
-    const cases = Array.from({ length: nCasesX * nCasesY }, () => []);
-
-    for (const p of points) {
-        const cx = Math.floor((p.x - minX) / tailleCase);
-        const cy = Math.floor((p.y - minY) / tailleCase);
-        cases[cy * nCasesX + cx].push(p);
-    }
-
-    const K = 8;
-    const distances = new Float64Array(K);
-    const proches = new Array(K);
-
-    for (let l = 0; l < lignes; l++) {
-        const py = y0 + l * pas;
-
-        for (let c = 0; c < colonnes; c++) {
-            const px = x0 + c * pas;
-
-            const ix = Math.min(W - 1, Math.max(0, Math.round(px * k)));
-            const iy = Math.min(H - 1, Math.max(0, Math.round(py * k)));
-            const altitudeCible = etat.altitudes ? etat.altitudes[iy * W + ix] : NaN;
-
-            const cx = Math.floor((px - minX) / tailleCase);
-            const cy = Math.floor((py - minY) / tailleCase);
-
-            let trouves = 0;
-            let anneauPlein = -1;
-
-            // On élargit la recherche case par case, puis d'un anneau de plus
-            // pour être certain de tenir les plus proches.
-            for (let rayon = 0; rayon < 40; rayon++) {
-                for (let dy = -rayon; dy <= rayon; dy++) {
-                    const yy = cy + dy;
-                    if (yy < 0 || yy >= nCasesY) continue;
-
-                    const bord = Math.abs(dy) === rayon;
-
-                    for (let dx = -rayon; dx <= rayon; dx += (bord ? 1 : 2 * rayon || 1)) {
-                        const xx = cx + dx;
-                        if (xx < 0 || xx >= nCasesX) continue;
-
-                        for (const p of cases[yy * nCasesX + xx]) {
-                            const d2 = (p.x - px) * (p.x - px) + (p.y - py) * (p.y - py);
-
-                            // Insertion triée dans les K plus proches
-                            let pos = trouves < K ? trouves : K;
-                            while (pos > 0 && distances[pos - 1] > d2) pos--;
-                            if (pos >= K) continue;
-
-                            for (let j = Math.min(trouves, K - 1); j > pos; j--) {
-                                distances[j] = distances[j - 1];
-                                proches[j] = proches[j - 1];
-                            }
-                            distances[pos] = d2;
-                            proches[pos] = p;
-                            if (trouves < K) trouves++;
-                        }
-                    }
-                }
-
-                if (trouves >= K && anneauPlein < 0) anneauPlein = rayon;
-                if (anneauPlein >= 0 && rayon >= anneauPlein + 1) break;
-            }
-
-            let somme = 0, poidsTotal = 0;
-
-            for (let j = 0; j < trouves; j++) {
-                const p = proches[j];
-                const poids = 1 / Math.max(distances[j], 1);
-                let t = p.t;
-
-                if (altitudeCible === altitudeCible && p.a === p.a) {
-                    t -= GRADIENT_ALTITUDE * (altitudeCible - p.a);
-                }
-
-                somme += t * poids;
-                poidsTotal += poids;
-            }
-
-            valeurs[l * colonnes + c] = poidsTotal ? somme / poidsTotal : NaN;
-        }
-    }
-
-    return { valeurs, colonnes, lignes, x0, y0, pas };
-}
-
-// Pas des zones de couleur : plus fin quand les écarts du jour sont faibles
-function pasDesZones(valeurs) {
-    const v = Array.from(valeurs).filter(Number.isFinite).sort((a, b) => a - b);
-    if (v.length < 10) return 2;
-    const etendue = v[Math.floor(v.length * 0.95)] - v[Math.floor(v.length * 0.05)];
-    return etendue <= 7 ? 1 : etendue <= 16 ? 2 : 3;
-}
-
-function dessinerChamp() {
+async function dessinerChamp() {
     const canvas = $("champ");
     const ctx = canvas.getContext("2d");
-    const W = canvas.width, H = canvas.height, k = etat.echelle;
+    const W = canvas.width, H = canvas.height;
+    const jeton = ++jetonChamp;
+    const generation = etat.generation;
+
+    const stations = stationsValides();
+    const projection = etat.projection;
+    const points = stations.map(s => {
+        const p = projection([s.longitude, s.latitude]);
+        return { x: p[0], y: p[1], t: s.temperature, a: Number.isFinite(s.altitude) ? s.altitude : NaN };
+    });
+
+    let resultat = null;
+    if (points.length >= 3) {
+        const hg = projection([-5.6, 51.6]), bd = projection([10.1, 41.0]);
+        const zone = {
+            x0: Math.max(0, Math.floor(hg[0])), y0: Math.max(0, Math.floor(hg[1])),
+            x1: Math.min(etat.largeur, Math.ceil(bd[0])), y1: Math.min(etat.hauteur, Math.ceil(bd[1]))
+        };
+        await preparerCadreCalcul();
+        if (jeton !== jetonChamp || generation !== etat.generation) return false;
+        resultat = await calcul.executer("champ", {
+            points, pas: 4, zone,
+            tailleCase: Math.max(24, largeurFrance() / 22),
+            teintes: teintesTemperature
+        });
+    }
+    if (jeton !== jetonChamp || generation !== etat.generation) {
+        if (resultat && resultat.image.close) resultat.image.close();
+        return false;
+    }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, W, H);
+    if (!resultat) return true;
 
-    const stations = stationsValides();
-    const champ = stations.length ? calculerChamp(stations, 4) : null;
-
-    if (!champ) return;
-
-    const { valeurs, colonnes, lignes, x0, y0, pas } = champ;
-    const pasBande = pasDesZones(valeurs);
-    etat.pasBande = pasBande;
-
-    const gx0 = Math.round(x0 * k), gy0 = Math.round(y0 * k);
-    const gl = Math.min(W - gx0, Math.round((colonnes - 1) * pas * k));
-    const gh = Math.min(H - gy0, Math.round((lignes - 1) * pas * k));
-
-    if (gl <= 0 || gh <= 0) return;
-
-    const image = ctx.createImageData(gl, gh);
-    const pixels = image.data;
-    const { table, debut, pas: pasT, taille } = teintesTemperature;
-    const ombres = etat.ombres;
-
-    // Couleur d'une zone : celle de son milieu
-    const couleurZone = n => {
-        let i = Math.round(((n + 0.5) * pasBande - debut) / pasT);
-        i = (i < 0 ? 0 : i >= taille ? taille - 1 : i) * 3;
-        return [table[i], table[i + 1], table[i + 2]];
-    };
-    const zones = new Map();
-    const zone = n => {
-        let c = zones.get(n);
-        if (!c) zones.set(n, c = couleurZone(n));
-        return c;
-    };
-
-    // Transition entre deux zones : un pixel ou deux, adoucie
-    const bord = 0.07;
-
-    for (let y = 0; y < gh; y++) {
-        const fy0 = (y / k) / pas;
-        const l0 = Math.min(lignes - 2, Math.floor(fy0));
-        const fy = fy0 - l0;
-
-        for (let x = 0; x < gl; x++) {
-            const fx0 = (x / k) / pas;
-            const c0 = Math.min(colonnes - 2, Math.floor(fx0));
-            const fx = fx0 - c0;
-
-            const i = l0 * colonnes + c0;
-            const haut = valeurs[i] + (valeurs[i + 1] - valeurs[i]) * fx;
-            const bas = valeurs[i + colonnes] + (valeurs[i + colonnes + 1] - valeurs[i + colonnes]) * fx;
-            const t = haut + (bas - haut) * fy;
-
-            if (t !== t) continue;
-
-            const b = t / pasBande;
-            const n = Math.floor(b);
-            const f = b - n;
-            let c = zone(n), r = c[0], g = c[1], bl = c[2];
-
-            if (f < bord || f > 1 - bord) {
-                const voisine = f < bord ? zone(n - 1) : zone(n + 1);
-                const m = f < bord ? 0.5 - f / (2 * bord) : 0.5 - (1 - f) / (2 * bord);
-                r += (voisine[0] - r) * m;
-                g += (voisine[1] - g) * m;
-                bl += (voisine[2] - bl) * m;
-                // Léger liseré sombre entre deux zones
-                const l = 1 - 0.07 * (1 - Math.min(f, 1 - f) / bord);
-                r *= l; g *= l; bl *= l;
-            }
-
-            // Le relief reste lisible sous la couleur : même ombrage que le fond
-            const ombre = ombres ? 0.25 + 0.75 * ombres[(gy0 + y) * W + gx0 + x] : 1;
-            const p = (y * gl + x) * 4;
-
-            r *= ombre; g *= ombre; bl *= ombre;
-            pixels[p] = r > 255 ? 255 : r;
-            pixels[p + 1] = g > 255 ? 255 : g;
-            pixels[p + 2] = bl > 255 ? 255 : bl;
-            pixels[p + 3] = 255;
-        }
-    }
-
-    ctx.putImageData(image, gx0, gy0);
+    etat.pasBande = resultat.pasBande;
+    poserImage(ctx, resultat.image, resultat.gx0, resultat.gy0);
 
     // Découpe selon les frontières françaises
     ctx.globalCompositeOperation = "destination-in";
-    ctx.setTransform(k, 0, 0, k, 0, 0);
-    tracerSurCanvas(ctx, etat.departements);
+    repereChemins(ctx);
     ctx.fillStyle = "#000";
-    ctx.fill();
+    ctx.fill(chemins.departements);
     ctx.globalCompositeOperation = "source-over";
 
     // Liseré blanc par-dessus les couleurs
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     lisereFrance(ctx, 2.4, "rgba(255, 255, 255, 0.92)");
+    if (etat.tableau === "temperatures") actualiserHabillage();
+    return true;
 }
 
 // Une valeur par case d'une grille régulière : la station la plus proche du
@@ -1857,18 +1767,16 @@ function nuitSurLaFrance(carte) {
 
 // --- Symboles répartis sur le territoire -----------------------------------
 
-let cheminFrance = null;
 const contexteTest = nouveauCanvas(1, 1).getContext("2d");
 
-function construireCheminFrance() {
-    if (cheminFrance) return;
-    cheminFrance = new Path2D();
-    d3.geoPath(etat.projection, cheminFrance)(etat.departements);
-}
-
+// Point (pixels CSS) en France : test sur le chemin des départements déjà
+// projeté, ramené au repère de l'écran (pas de reprojection)
 function dansFrance(x, y) {
-    construireCheminFrance();
-    return contexteTest.isPointInPath(cheminFrance, x, y);
+    const p = etat.projection;
+    const f = p.scale() / ECHELLE_CHEMINS;
+    const [tx, ty] = p.translate();
+    contexteTest.setTransform(f, 0, 0, f, tx, ty);
+    return contexteTest.isPointInPath(chemins.departements, x, y);
 }
 
 function positionsSymboles(espacement) {
@@ -1953,6 +1861,7 @@ function situationAutour(carte, x, y, rayon) {
 }
 
 function placerConditions() {
+    if (!chemins.departements) return;
     const carte = carteConditions();
     const calque = d3.select("#calque-conditions");
 
@@ -2165,69 +2074,37 @@ function placerConditionsStations() {
 // 8. Tableau 4 — satellite
 // ---------------------------------------------------------------------------
 
-let chargementSatellite = null;
+// Images satellite : profil choisi selon la finesse utile à l'écran.
+//   leger     1280 px pour 38° de longitude
+//   standard  1990 px
+//   haute     pleine résolution, Europe de l'Ouest seulement
+// Les petits écrans n'ont pas besoin de plus que « leger » : rien d'inutile
+// n'est téléchargé ni décodé. Les grands écrans gardent la pleine finesse.
+const PROFILS_SATELLITE = {
+    leger: { pxParDegre: 1280 / 38, emprise: [-16, 34, 22, 60] },
+    standard: { pxParDegre: 1990 / 38, emprise: [-16, 34, 22, 60] },
+    haute: { pxParDegre: 2514 / 24, emprise: [-9.5, 37, 14.5, 56] }
+};
 
-// Fond Blue Marble : la version légère sur petit écran
-function chargerImageSatellite() {
-    if (chargementSatellite) return chargementSatellite;
+function profilSatellite() {
+    const force = PARAMETRES.get("satellite");
+    if (PROFILS_SATELLITE[force]) return force;
+    const p = etat.projection;
+    const [o, n] = p.invert([0, 0]);
+    const [e, s] = p.invert([etat.largeur, etat.hauteur]);
+    const besoin = etat.largeur * etat.echelle / (e - o);        // pixels de toile par degré
+    const tient = ([eo, es, ee, en]) => o >= eo && e <= ee && s >= es && n <= en;
+    if (PROFIL.lente) return "leger";
+    if (besoin <= PROFILS_SATELLITE.leger.pxParDegre * 1.15) return "leger";
+    if (PROFIL.nom === "leger") return "standard";
+    if (besoin <= PROFILS_SATELLITE.standard.pxParDegre * 1.15 || !tient(PROFILS_SATELLITE.haute.emprise)) return "standard";
+    return "haute";
+}
 
-    const jour = etat.jour;
-    const url = "/meteo/api/geocolour/" +
-        (jour ? `?jour=${encodeURIComponent(jour)}` : "");
-
-    chargementSatellite = fetch(url)
-        .then(reponse => {
-            if (!reponse.ok) {
-                throw new Error("API GeoColour indisponible");
-            }
-            return reponse.json();
-        })
-        .then(async donnees => {
-            if (!donnees.trames.length) {
-                const reponse = await fetch(
-                    "/meteo/api/geocolour/?dernier=1"
-                );
-
-                if (!reponse.ok) {
-                    throw new Error("API GeoColour indisponible");
-                }
-
-                donnees = await reponse.json();
-            }
-
-            if (!donnees.trames.length) {
-                throw new Error("Aucune observation disponible");
-            }
-
-            const derniere = donnees.trames.at(-1);
-
-            return chargerImage(derniere.url).then(image => {
-                etat.imageSatellite = image;
-                etat.instantGeocolour = derniere.instant;
-
-                etat.jourGeocolour = jour;
-                etat.erreurGeocolour = null;
-
-                etat.fondsAJour.delete("satellite");
-
-                if (etat.tableau === "satellite") {
-                    assurerFond("satellite");
-                    actualiserHabillage();
-                }
-            });
-        })
-        .catch(erreur => {
-            if (etat.jour === jour) {
-                etat.erreurGeocolour = erreur.message;
-            }
-            console.warn("HKO : GeoColour —", erreur.message);
-        })
-        .finally(() => {
-            chargementSatellite = null;
-            actualiserHabillage();
-        });
-
-    return chargementSatellite;
+// Le dernier état connu du satellite, pour le sous-titre et l'état « indisponible »
+function satelliteAffiche() {
+    const r = etat.rendus.satellite;
+    return r && r.pret;
 }
 
 // ---------------------------------------------------------------------------
@@ -2247,7 +2124,8 @@ const lecteur = {
     lecture: !reduitMouvement,
     pause: 0,                 // temps restant sur la dernière image
     precedent: 0,
-    boucle: 0
+    boucle: 0,
+    sale: false               // à redessiner au prochain passage
 };
 
 async function chargerAnimation(source, jour) {
@@ -2268,10 +2146,11 @@ async function chargerAnimation(source, jour) {
 
     let resultat;
     try {
+        const profilRadar = PROFIL.nom === "leger" ? "leger" : "standard";
         const url = MODE_OPERA && source === "radar"
-            ? `${URL_ANIMATION}?source=opera&jour=${encodeURIComponent(jour)}`
+            ? `${URL_RADAR}?jour=${encodeURIComponent(jour)}&profil=${profilRadar}`
             : source === "satellite"
-                ? `/meteo/api/geocolour/?jour=${encodeURIComponent(jour)}`
+                ? `${URL_SATELLITE}?jour=${encodeURIComponent(jour)}&profil=${profilSatellite()}`
                 : `${URL_ANIMATION}?source=${source}&jour=${encodeURIComponent(jour)}`;
 
         const reponse = await fetch(url);
@@ -2294,11 +2173,19 @@ async function chargerAnimation(source, jour) {
             if (source === "satellite") {
                 resultat = {
                     ...donnees,
-                    trames: donnees.trames.map(trame => ({
+                    trames: donnees.observations.map(trame => ({
                         ...trame,
                         ms: Date.parse(trame.instant)
                     }))
                 };
+                // Journée sans observation : la dernière image connue, à défaut
+                if (!resultat.trames.length && donnees.secours) {
+                    resultat.trames = [{ ...donnees.secours, ms: Date.parse(donnees.secours.instant) }];
+                    resultat.video = null;
+                    resultat.secours = true;
+                }
+            } else if (MODE_OPERA) {
+                resultat = HKOAnime.sequenceBinaire(donnees);
             } else {
                 resultat = HKOAnime.decoder(donnees);
             }
@@ -2313,7 +2200,8 @@ async function chargerAnimation(source, jour) {
     if (connue && !connue.absente && !resultat.absente &&
         connue.trames.length === resultat.trames.length &&
         connue.trames.every((trame, i) =>
-            trame.ms === resultat.trames[i].ms)) {
+            trame.ms === resultat.trames[i].ms) &&
+        (connue.video && connue.video.url) === (resultat.video && resultat.video.url)) {
         connue.recu = resultat.recu;
         return connue;
     }
@@ -2325,6 +2213,12 @@ async function chargerAnimation(source, jour) {
     }
 
     cache.set(jour, resultat);
+    // Mémoire bornée : les trois dernières journées consultées
+    while (cache.size > 3) {
+        const ancienne = [...cache.keys()].find(j => j !== jour && j !== etat.jour);
+        if (!ancienne) break;
+        cache.delete(ancienne);
+    }
     return resultat;
 }
 
@@ -2333,138 +2227,107 @@ function sequenceDuJour(source) {
     return s && !s.absente ? s : null;
 }
 
-function creerRenduGeocolour() {
-    let demande = null;
-    let affichee = null;
-
-    const cacheImages = new Map();
-    const mobile = window.matchMedia("(pointer: coarse)").matches;
-    const MAX_IMAGES = mobile ? 2 : 3;
-
-    function imageEnCache(url) {
-        if (cacheImages.has(url)) {
-            return cacheImages.get(url);
+function creerRenduSatellite() {
+    const mode = PARAMETRES.get("lecteur") === "images" ? "images" : "video";
+    const peutLireH264 = document.createElement("video").canPlayType('video/mp4; codecs="avc1.640033"');
+    return HKOSatellite.creer({
+        toile: $("fond-satellite"),
+        voile: $("voile-satellite"),
+        conteneur: $("video-satellite"),
+        projection: () => etat.projection,
+        echelle: () => etat.echelle,
+        mode: peutLireH264 ? mode : "images",
+        maxImages: PROFIL.nom === "leger" ? 2 : PROFIL.nom === "riche" ? 4 : 3,
+        dureeBoucle: DUREE_BOUCLE,
+        journal,
+        surImage(trame) {
+            etat.instantGeocolour = trame.instant;
+            if (etat.tableau === "satellite") actualiserHabillage();
         }
+    });
+}
 
-        const promesse = chargerImage(url)
-            .then(async image => {
-                if (image.decode) {
-                    await image.decode();
-                }
-                return image;
-            })
-            .catch(erreur => {
-                if (cacheImages.get(url) === promesse) {
-                    cacheImages.delete(url);
-                }
-                throw erreur;
-            });
+// Trames OPERA binaires : téléchargées, converties (Worker) et envoyées au
+// processeur graphique une à une ; l'animation est visible dès la première.
+const remplissages = new WeakMap();
 
-        cacheImages.set(url, promesse);
+function remplirRadar(sequence, r) {
+    if (remplissages.get(r) === sequence) return;
+    remplissages.set(r, sequence);
+    const { nx, ny } = sequence.grille;
+    const n = nx * ny;
+    const cle = `${sequence.jour}:${sequence.trames[0].instant}:${sequence.trames.length}:${Math.random()}`;
+    const recues = new Set();
+    const t = sequence.trames;
+    // D'abord la dernière (affichée à l'arrêt), puis dans l'ordre
+    const ordre = [t.length - 1, ...t.keys()].filter((v, i, a) => a.indexOf(v) === i);
+    const actif = () => r.sequence === sequence && remplissages.get(r) === sequence;
 
-        while (cacheImages.size > MAX_IMAGES) {
-            const ancienne = cacheImages.keys().next().value;
-            cacheImages.delete(ancienne);
-        }
+    const mouvementEntre = async i => {
+        if (!recues.has(i) || !recues.has(i + 1) || !actif()) return;
+        if (t[i + 1].ms - t[i].ms > sequence.pas * 2.5) return;   // lacune : pas de mouvement deviné
+        try {
+            const m = await calcul.executer("mouvement", { cle, i, nx, ny, liberer: recues.has(i - 1) || i === 0 });
+            if (actif() && m) r.definirFlux(i, m);
+        } catch (e) { /* fondu simple */ }
+    };
 
-        return promesse;
-    }
-
-    function precharger(sequence, index) {
-        for (let i = 1; i < MAX_IMAGES; i++) {
-            const suivante = sequence.trames[index + i];
-
-            if (suivante) {
-                imageEnCache(suivante.url).catch(() => {});
+    let suivant = 0;
+    const charger = async () => {
+        while (suivant < ordre.length && actif()) {
+            const i = ordre[suivant++];
+            try {
+                const reponse = await fetch(t[i].url);
+                if (!reponse.ok) throw new Error(`${reponse.status}`);
+                const octets = await reponse.arrayBuffer();
+                if (!actif()) return;
+                const { rgba } = await calcul.executer("trame", { octets, source: "radar", n, cle, i },
+                                                       calcul.parallele ? [octets] : undefined);
+                if (!actif()) return;
+                r.ajouterTrame(i, rgba);
+                recues.add(i);
+                await mouvementEntre(i - 1);
+                await mouvementEntre(i);
+                if (!lecteur.boucle && lecteur.source === "radar") dessinerAnimation();
+            } catch (erreur) {
+                console.info("HKO : trame radar manquante —", erreur.message);
             }
         }
-    }
+        if (suivant >= ordre.length) calcul.executer("oublier", { cle }).catch(() => {});
+    };
+    // Deux téléchargements à la fois : rapide sans saturer une connexion lente
+    charger();
+    if (!PROFIL.lente) charger();
+}
 
-    return {
-        sequence: null,
-
-        charger(sequence) {
-            const memeJour = this.sequence &&
-                this.sequence.jour === sequence.jour;
-
-            this.sequence = sequence;
-            demande = null;
-
-            if (!memeJour) {
-                affichee = null;
-                cacheImages.clear();
-            }
+function creerRenduRadar() {
+    const options = {
+        surPerte() {
+            journal({ type: "webgl_perdu", source: "radar" });
+            scene.classList.add("radar-statique");
         },
-
-        situation(instant) {
-            if (!this.sequence?.trames.length) return null;
-
-            let index = 0;
-
-            for (let i = 0; i < this.sequence.trames.length; i++) {
-                if (this.sequence.trames[i].ms > instant) break;
-                index = i;
+        surRestauration(sequence) {
+            journal({ type: "webgl_retabli", source: "radar" });
+            const r = etat.rendus.radar;
+            remplissages.delete(r);
+            if (sequence) {
+                if (sequence.opera) { r.charger(sequence, true); remplirRadar(sequence, r); }
+                else r.charger(sequence);
             }
-
-            return {
-                avant: index,
-                observee: true,
-                lacune: false
-            };
-        },
-
-        dessiner({ instant }) {
-            const s = this.situation(instant);
-            if (!s) return;
-
-            const sequence = this.sequence;
-            const trame = sequence.trames[s.avant];
-
-            if (affichee === trame.url || demande) return;
-
-            const jour = etat.jour;
-            const requete = {};
-            demande = requete;
-
-            imageEnCache(trame.url)
-                .then(image => {
-                    if (this.sequence !== sequence ||
-                        etat.jour !== jour ||
-                        etat.tableau !== "satellite") return;
-
-                    etat.imageSatellite = image;
-                    etat.instantGeocolour = trame.instant;
-                    etat.jourGeocolour = jour;
-
-                    affichee = trame.url;
-
-                    etat.fondsAJour.delete("satellite");
-                    assurerFond("satellite");
-
-                    if (lecteur.lecture) {
-                        precharger(sequence, s.avant);
-                    }
-                })
-                .catch(erreur => {
-                    console.warn("GeoColour :", erreur);
-                })
-                .finally(() => {
-                    if (demande === requete) demande = null;
-                });
+            actualiserHabillage();
+            if (lecteur.source === "radar") demarrerLecture("radar");
         }
     };
+    return window.HKOAnime ? HKOAnime.creer($("gl-radar"), "radar", options) : null;
 }
 
 function rendu(source) {
-
     if (source === "satellite") {
-        if (!etat.rendus.satellite) {
-            etat.rendus.satellite = creerRenduGeocolour();
-        }
+        if (!etat.rendus.satellite) etat.rendus.satellite = creerRenduSatellite();
         return etat.rendus.satellite;
     }
     if (etat.rendus[source] === undefined) {
-        etat.rendus[source] = window.HKOAnime ? HKOAnime.creer($(`gl-${source}`), source) : null;
+        etat.rendus[source] = creerRenduRadar();
         if (!etat.rendus[source]) scene.classList.add(`sans-gl-${source}`);
     }
     return etat.rendus[source];
@@ -2509,7 +2372,12 @@ async function preparerAnimation(source) {
 
             construireFrise(sequence);
         } else {
-            r.charger(sequence);
+            if (sequence.opera) {
+                r.charger(sequence, true);
+                remplirRadar(sequence, r);
+            } else {
+                r.charger(sequence);
+            }
 
             if (lecteur.source === source) {
                 lecteur.instant = sequence.trames.at(-1).ms;
@@ -2560,6 +2428,8 @@ function arreterLecture() {
     lecteur.boucle = 0;
 }
 
+// Une image par rafraîchissement d'écran pendant la lecture ; à l'arrêt, la
+// boucle s'interrompt (rien n'est redessiné tant que rien ne change).
 function avancer(maintenant) {
     const sequence = lecteur.sequence;
     if (!sequence || sourceAffichee() !== lecteur.source || document.hidden) {
@@ -2571,6 +2441,10 @@ function avancer(maintenant) {
     lecteur.precedent = maintenant;
 
     const debut = sequence.trames[0].ms, fin = sequence.trames.at(-1).ms;
+    const r = etat.rendus[lecteur.source];
+    const video = lecteur.source === "satellite" && r && r.utiliseVideo;
+    const avant = lecteur.instant;
+
     if (lecteur.lecture && fin > debut) {
         if (lecteur.instant >= fin) {
             lecteur.pause += dt;
@@ -2578,12 +2452,30 @@ function avancer(maintenant) {
                 lecteur.instant = debut;
                 lecteur.pause = 0;
             }
+        } else if (video && r.utiliseVideo(lecteur.instant)) {
+            // La vidéo donne l'heure : l'image affichée et la frise ne font qu'un
+            const v = r.instantVideo();
+            if (v !== null) lecteur.instant = Math.max(debut, Math.min(fin, v));
         } else {
             lecteur.instant = Math.min(fin, lecteur.instant + dt * (fin - debut) / DUREE_BOUCLE);
         }
     }
 
-    dessinerAnimation();
+    if (lecteur.lecture || lecteur.instant !== avant || lecteur.sale) {
+        lecteur.sale = false;
+        dessinerAnimation();
+    }
+
+    if (!lecteur.lecture) {
+        lecteur.boucle = 0;
+        return;
+    }
+    lecteur.boucle = requestAnimationFrame(avancer);
+}
+
+function relancerBoucle() {
+    if (lecteur.boucle || !lecteur.sequence) return;
+    lecteur.precedent = performance.now();
     lecteur.boucle = requestAnimationFrame(avancer);
 }
 
@@ -2614,7 +2506,7 @@ function dessinerAnimation() {
             hachures: true
         });
     } else {
-        r.dessiner({ ...commun, detail: true });
+        r.dessiner({ ...commun, lecture: lecteur.lecture && !document.hidden });
     }
 
     majFrise();
@@ -2681,6 +2573,8 @@ function installerFrise() {
         lecteur.pause = 0;
         majBoutonAnimation();
         suspendreDefilement();
+        lecteur.sale = true;
+        relancerBoucle();
     });
 
     $("frise-curseur").addEventListener("input", evenement => {
@@ -2692,6 +2586,7 @@ function installerFrise() {
         const debut = sequence.trames[0].ms, fin = sequence.trames.at(-1).ms;
         lecteur.instant = debut + (fin - debut) * Number(evenement.target.value) / 1000;
         if (!lecteur.boucle) dessinerAnimation();
+        else lecteur.sale = true;
     });
 }
 
@@ -2874,7 +2769,10 @@ function habillageConditions(carte) {
 }
 
 function habillageSatellite(sequence) {
-    const instant = etat.instantGeocolour;
+    // Comme avant : l'heure de la dernière observation de la journée
+    const instant = sequence && sequence.trames.length
+        ? sequence.trames.at(-1).instant
+        : etat.instantGeocolour;
 
     const date = instant
         ? new Date(instant).toLocaleDateString("fr-FR", {
@@ -2920,16 +2818,13 @@ function etatIndisponible() {
             return ["Pas d'image satellite pour un jour à venir",
                 "Le satellite montre les nuages observés. Les nuages prévus apparaissent dans les conditions météo."];
         }
-        if (etat.imageSatellite) {
-            return null;
-        }
-
-        if (chargementSatellite) return null;
-
+        if (satelliteAffiche()) return null;
+        const sequence = etat.jour && etat.animations.satellite.get(etat.jour);
+        if (!sequence || !sequence.absente) return null;          // encore en chargement
+        if (sequence.reseau) return ["Satellite inaccessible", sequence.motif, true];
         return [
             "Pas d'image satellite pour ce jour",
-            etat.erreurGeocolour ||
-            "Aucune observation GeoColour disponible."
+            sequence.motif || "Aucune observation GeoColour disponible."
         ];
     }
 
@@ -3141,8 +3036,9 @@ function afficherTableau(tableau, manuel = false) {
     if (tableau === "conditions") preparerConditions();
 
     if (tableau === "satellite") {
-        chargerImageSatellite();
         preparerAnimation("satellite");
+    } else if (etat.rendus.satellite) {
+        etat.rendus.satellite.suspendre();     // plus aucun décodage hors du tableau
     }
 
     if (tableau !== "precipitations" && tableau !== "satellite") arreterLecture();
@@ -3161,7 +3057,7 @@ function afficherTableau(tableau, manuel = false) {
     const plusTard = window.requestIdleCallback || (f => setTimeout(f, 300));
     if (tableau === "temperatures") plusTard(() => { assurerFond("precipitations"); preparerAnimation("radar"); });
     if (tableau === "precipitations") plusTard(() => preparerConditions());
-    if (tableau === "conditions") plusTard(() => { chargerImageSatellite(); preparerAnimation("satellite"); });
+    if (tableau === "conditions") plusTard(() => preparerAnimation("satellite"));
 
     planifierDefilement();
 }
@@ -3171,7 +3067,7 @@ let conditionsEnCours = null;
 
 async function preparerConditions() {
     const jour = etat.jour;
-    if (!jour) return;
+    if (!jour || !chemins.departements) return;
 
     const connue = etat.conditions.get(jour);
     const aujourdhui = etat.donnees && etat.donnees.aujourdhui;
@@ -3204,6 +3100,7 @@ function reglerLecture(actif) {
     if (actif && !reduitMouvement && !lecteur.lecture) {
         lecteur.lecture = true;
         majBoutonAnimation();
+        relancerBoucle();
     }
     clearTimeout(minuterieReprise);
     majBoutonLecture();
@@ -3230,6 +3127,15 @@ async function chargerJour(jour, cleProgression) {
 
     donnees.recu = Date.now();
     etat.jours.set(donnees.jour, donnees);
+    // Mémoire bornée : quelques journées seulement
+    for (const j of [...etat.jours.keys()]) {
+        if (etat.jours.size <= 4) break;
+        if (j !== donnees.jour && j !== etat.jour) etat.jours.delete(j);
+    }
+    for (const j of [...etat.conditions.keys()]) {
+        if (etat.conditions.size <= 3) break;
+        if (j !== etat.jour) etat.conditions.delete(j);
+    }
 
     return donnees;
 }
@@ -3242,7 +3148,11 @@ function installerDonnees(donnees) {
     etat.conditionsPretes = false;
 
     if (ancienneDate !== donnees.date) {
+        // Nouvelle heure d'observation : nouvelle ambiance du fond des
+        // températures (le relief, lui, n'est pas recalculé)
         etat.fondsAJour.delete("temperatures");
+        etat.versionAmbiance++;
+        if (etat.tableau === "temperatures") assurerFond("temperatures");
     }
 }
 
@@ -3367,9 +3277,8 @@ function installerCommandes() {
         } catch (erreur) { /* on réessaiera au prochain passage */ }
         chargerRadar();
 
-        if (etat.tableau !== "satellite") {
-            chargerImageSatellite();
-        }
+        // Le satellite n'est actualisé que s'il est affiché (minuterie dédiée) :
+        // aucune image n'est téléchargée ni décodée pour un tableau caché.
 
         if (etat.tableau === "conditions") preparerConditions();
 
@@ -3407,7 +3316,6 @@ function installerCommandes() {
 function redessiner() {
     cacherBulle();
     cadrer();
-    etat.profondeurs = null;
     assurerFond(etat.tableau);
     dessinerChamp();
     placerTemperatures();
@@ -3417,6 +3325,38 @@ function redessiner() {
     if (etat.tableau === "conditions") placerConditions();
     if (lecteur.boucle === 0 && lecteur.source === sourceAffichee()) dessinerAnimation();
     actualiserHabillage();
+    preparerTableauxSuivants();
+}
+
+// Les autres tableaux sont préparés pendant que le premier est à l'écran,
+// quand la page est au repos : le clic sur un tableau est alors immédiat.
+function preparerTableauxSuivants() {
+    const auRepos = window.requestIdleCallback
+        ? f => requestIdleCallback(f, { timeout: 2000 })
+        : f => setTimeout(f, 200);
+    const suite = ["temperatures", "precipitations", "conditions"].filter(t => t !== etat.tableau);
+    const generation = etat.generation;
+    const prochain = () => {
+        if (generation !== etat.generation || !suite.length) return;
+        const t = suite.shift();
+        assurerFond(t).then(() => auRepos(prochain));
+    };
+    auRepos(prochain);
+}
+
+// Canvas 2D effacé par le navigateur (mémoire reprise, onglet en
+// arrière-plan sur mobile) : tout est redessiné à son retour.
+function surveillerContextes() {
+    for (const id of CANVAS_2D) {
+        $(id).addEventListener("contextlost", () => journal({ type: "canvas_perdu", id }));
+        $(id).addEventListener("contextrestored", () => {
+            etat.masqueTerres = null;
+            etat.fondsAJour.clear();
+            if (etat.rendus.satellite) etat.rendus.satellite.cadrer();
+            redessiner();
+            if (lecteur.source) { lecteur.sale = true; dessinerAnimation(); }
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3431,6 +3371,9 @@ function echecFatal(message) {
     $("intro-etape").textContent = "Chargement interrompu";
 }
 
+// Démarrage progressif : le tableau satellite (le premier) n'a besoin que
+// des observations du jour et d'une image ; l'ouverture se ferme dès qu'il
+// est prêt. Contours, relief et autres tableaux suivent en arrière-plan.
 async function demarrer() {
     if (typeof d3 === "undefined") {
         return echecFatal("La bibliothèque de cartographie n'a pas pu être chargée. Vérifiez la connexion.");
@@ -3442,6 +3385,8 @@ async function demarrer() {
 
     cadrer();
     installerCommandes();
+    surveillerContextes();
+    surveillerLenteur();
 
     // Chargement trop long : on propose de voir la carte sans attendre.
     const alerte = setTimeout(() => {
@@ -3450,26 +3395,32 @@ async function demarrer() {
         $("intro-passer").onclick = fermerIntro;
     }, 10000);
 
-    // Tout ce qui sert au premier tableau part en même temps.
-    const promessePays = chargerRessource("pays", "geo/hko_pays.geojson", "geo/pays_monde_50m.geojson");
-    const promesseDepartements = chargerRessource(
-        "departements", "geo/hko_departements.geojson", "geo/departements.geojson");
+    // Contours, relief (lu et préparé par le Worker) et fonds marins : tout
+    // de suite si le premier tableau en a besoin, sinon juste après le
+    // satellite, pour ne pas lui disputer la connexion.
+    let lancerReste;
+    const reste = new Promise(r => { lancerReste = r; });
+    if (etat.tableau !== "satellite") lancerReste();
+    setTimeout(lancerReste, 8000);          // au plus tard
 
-    const promesseRelief = chargerRessource("relief", "relief/hko_relief.json.gz", "relief/relief_europe.json.gz")
-        .then(normaliserRelief)
-        .catch(erreur => {
-            // Sans relief, la carte reste utilisable (terres en aplat).
-            console.warn("HKO : relief indisponible —", erreur.message);
-            progresser("relief", 1);
-            return null;
-        });
+    reste.then(() => {
+        chargerRelief().finally(() => progresser("relief", 1));
+        chargerBathymetrie().finally(() => progresser("bathymetrie", 1));
+    });
 
-    const promesseBathymetrie = chargerImage(STATIQUE + "fonds/bathymetrie.jpg")
-        .catch(erreur => {
-            console.info("HKO : fonds marins indisponibles —", erreur.message);
-            return null;
-        })
-        .finally(() => progresser("bathymetrie", 1));
+    const promesseContours = reste.then(() => Promise.all([
+        chargerRessource("pays", "geo/hko_pays.geojson", "geo/pays_monde_50m.geojson"),
+        chargerRessource("departements", "geo/hko_departements.geojson", "geo/departements.geojson")
+    ])).then(([pays, departements]) => {
+        etat.pays = pays;
+        etat.departements = {
+            type: "FeatureCollection",
+            features: departements.features.filter(d =>
+                !String((d.properties || {}).code || "").startsWith("97"))
+        };
+        construireChemins();
+        return true;
+    });
 
     const promesseObservations = chargerJour(null, "observations")
         .catch(erreur => {
@@ -3482,55 +3433,60 @@ async function demarrer() {
         })
         .finally(() => progresser("observations", 1));
 
-    try {
-        const [pays, departements] = await Promise.all([promessePays, promesseDepartements]);
-
-        etat.pays = pays;
-        etat.departements = {
-            type: "FeatureCollection",
-            features: departements.features.filter(d =>
-                !String((d.properties || {}).code || "").startsWith("97"))
-        };
-    } catch (erreur) {
-        console.error(erreur);
-        clearTimeout(alerte);
-        return echecFatal("Les contours de la carte n'ont pas pu être chargés.");
-    }
-
-    etat.relief = await promesseRelief;
-    etat.bathymetrie = await promesseBathymetrie;
-
     installerDonnees(await promesseObservations);
 
-    await attendreImage();
-
-    if (etat.tableau === "satellite") {
-        await Promise.all([
-            chargerImageSatellite(),
-            preparerAnimation("satellite")
-        ]);
-
+    // Premier tableau
+    const premier = etat.tableau;
+    if (premier === "satellite" && etat.donnees.type !== "prevision") {
+        const sequence = await preparerAnimation("satellite");
+        // L'image du moment, posée avant d'ouvrir
+        const r = etat.rendus.satellite;
+        if (sequence && r) {
+            const attente = Date.now();
+            while (!r.pret && Date.now() - attente < 6000) await new Promise(f => setTimeout(f, 50));
+        }
         assurerFond("satellite");
+        for (const cle of Object.keys(etapes)) progresser(cle, 1);
+        lancerReste();
     } else {
-        assurerFond(etat.tableau);
+        try {
+            await promesseContours;
+        } catch (erreur) {
+            console.error(erreur);
+            clearTimeout(alerte);
+            return echecFatal("Les contours de la carte n'ont pas pu être chargés.");
+        }
+        await assurerFond(premier);
+        progresser("fond", 1);
+        await dessinerChamp();
+        placerTemperatures();
+        progresser("champ", 1);
     }
-
-    progresser("fond", 1);
-
-    await attendreImage();
-    dessinerChamp();
-    placerTemperatures();
+    lancerReste();
     actualiserHabillage();
-    progresser("champ", 1);
-
     clearTimeout(alerte);
 
     // La marque reste lisible un instant, même si tout est déjà en cache.
-    const reste = Math.max(0, 1300 - (performance.now() - debut));
-    setTimeout(fermerIntro, reste);
+    const delai = Math.max(0, 1300 - (performance.now() - debut));
+    setTimeout(fermerIntro, delai);
 
-    // Tableaux suivants préparés en arrière-plan, pendant l'affichage du premier.
-    setTimeout(chargerRadar, reste + 400);
+    // Tableaux suivants, en arrière-plan
+    promesseContours.then(async () => {
+        await dessinerChamp();
+        placerTemperatures();
+        placerRadar();
+        preparerTableauxSuivants();
+        if (etat.tableau !== premier) afficherTableau(etat.tableau);
+    }).catch(erreur => {
+        console.error(erreur);
+        journal({ type: "contours", message: String(erreur.message).slice(0, 200) });
+    });
+    setTimeout(chargerRadar, delai + 400);
+}
+
+// Essais automatisés (?essai=1) : accès à l'état, sans effet sur la page
+if (PARAMETRES.has("essai")) {
+    window.HKOEssai = { etat, lecteur, assurerFond, dessinerChamp, rendu, calcul, PROFIL };
 }
 
 demarrer();

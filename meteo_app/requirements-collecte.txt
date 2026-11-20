@@ -12,3 +12,8 @@ scipy>=1.11       # plus proches stations (déjà dans requirements.txt)
 eumdac>=4.0       # EUMETSAT Data Store (masque nuageux MTG)
 # Facultatif : lecture plus robuste des GeoTIFF compressés d'AROME
 # tifffile>=2024.1
+
+# Refonte : vidéos satellite H.264 (commande hko_derives). FFmpeg est cherché
+# dans l'ordre : réglage HKO_FFMPEG, PATH (Linux : sudo apt install ffmpeg),
+# puis ce paquet, qui fournit un FFmpeg prêt à l'emploi (pratique sous Windows).
+# imageio-ffmpeg>=0.5

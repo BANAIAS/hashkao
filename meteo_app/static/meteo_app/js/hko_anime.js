@@ -19,13 +19,23 @@
 
    API (window.HKOAnime) :
      decoder(reponse)            réponse de /api/animation/ -> séquence
-     creer(canvas, source)       moteur de rendu, ou null sans WebGL
-       .charger(sequence)        envoie les trames au processeur graphique
+     sequenceBinaire(index)      index de /api/radar/ -> séquence à remplir
+     creer(canvas, source, options)
+                                 moteur de rendu, ou null sans WebGL
+       .charger(sequence)        envoie les trames au processeur graphique,
+                                 par petits paquets (la page reste fluide)
+       .ajouterTrame(i, rgba)    texture déjà convertie (Worker)
+       .definirFlux(i, m)        mouvement calculé ailleurs (Worker)
        .dessiner(etat)           dessine l'instant etat.instant (ms)
        .situation(instant)       { avant, apres, fraction, observee }
+       .liberer()                rend la mémoire graphique
+     options.surPerte / options.surRestauration : perte du contexte WebGL
+     (mémoire graphique reprise par le système, pilote réinitialisé…).
+     Ce fichier est aussi chargé par le Worker de calcul (hko_calcul.js),
+     qui n'en utilise que estimerMouvement et champSuivi.
    ========================================================================== */
 
-(() => {
+((portee) => {
 "use strict";
 
 // ---------------------------------------------------------------------------
@@ -37,6 +47,22 @@ function base64VersOctets(texte) {
     const octets = new Uint8Array(binaire.length);
     for (let i = 0; i < binaire.length; i++) octets[i] = binaire.charCodeAt(i);
     return octets;
+}
+
+// Index de /api/radar/ (trames binaires servies à part) -> séquence vide,
+// complétée trame par trame (plan1/plan2 ou rgba) à mesure du chargement.
+function sequenceBinaire(index) {
+    const g = index.grille;
+    return {
+        source: index.source,
+        jour: index.jour,
+        grille: g,
+        opera: true,
+        pas: (index.pas_minutes || 15) * 60000,
+        attribution: index.attribution,
+        trames: index.trames.map(t => ({ instant: t.instant, ms: Date.parse(t.instant), url: t.url }))
+            .sort((a, b) => a.ms - b.ms)
+    };
 }
 
 function decoder(reponse) {
@@ -228,6 +254,7 @@ uniform sampler2D uFlux;
 uniform vec2 uFluxEchelle;
 uniform float uT;            // 0 : trame A, 1 : trame B
 uniform float uFlux0;        // 1 si le mouvement est disponible
+uniform float uFinesse;      // 1 : grille d'origine ; 0,5 : grille deux fois plus grossière
 
 const float PI = 3.14159265;
 
@@ -266,8 +293,8 @@ vec4 sur(vec4 dessous, vec3 couleur, float alpha) {
 }
 `;
 // Paramètres expérimentaux du rendu OPERA
-const RADAR_OPERA =
-    new URLSearchParams(window.location.search).get("opera") !== "0";
+const RADAR_OPERA = !(portee.location &&
+    new URLSearchParams(portee.location.search).get("opera") === "0");
 
 const OPERA_LISSAGE = 1.50;
 const OPERA_TRANSITION = 0.30;
@@ -281,7 +308,7 @@ uniform float uHachures;
 void main() {
     vec2 g = versGrille(lonLat());
     vec2 uv = g / uCellules;
-    float dedans = dansGrille(g, 8.0);
+    float dedans = dansGrille(g, 8.0 * uFinesse);
 
 
     vec4 f = dedans > 0.0 ? echantillon(uv) : vec4(0.0);
@@ -291,7 +318,7 @@ void main() {
 
     ${RADAR_OPERA ? `
     if (dedans > 0.0 && couverture > 0.5) {
-        vec2 d = vec2(${OPERA_LISSAGE.toFixed(3)}) / uCellules;
+        vec2 d = vec2(${OPERA_LISSAGE.toFixed(3)} * uFinesse) / uCellules;
 
         vec4 voisins[4];
         voisins[0] = echantillon(uv + vec2(d.x, 0.0));
@@ -569,82 +596,146 @@ function soleilDuJour(ms) {
     };
 }
 
-function creer(canvas, source) {
+function creer(canvas, source, options = {}) {
     const gl = canvas.getContext("webgl", { premultipliedAlpha: true, alpha: true, antialias: false })
         || canvas.getContext("experimental-webgl", { premultipliedAlpha: true, alpha: true });
     if (!gl) return null;
 
-    let prog;
-    try {
+    // Ressources graphiques : recréées à l'identique après une perte de contexte
+    let prog, tampon, u, bruit, fluxNul;
+    let perdu = false;
+
+    function initialiser() {
         prog = programme(gl, source === "radar" ? RADAR : SATELLITE);
+        tampon = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, tampon);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+
+        u = {};
+        const nb = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+        for (let i = 0; i < nb; i++) {
+            const info = gl.getActiveUniform(prog, i);
+            const nom = info.name.replace(/\[0\]$/, "");
+            u[nom] = gl.getUniformLocation(prog, info.name);
+        }
+
+        bruit = null;
+        if (source === "satellite") {
+            const b = texteBruit();
+            bruit = texture(gl, b.taille, b.taille, b.octets, true);
+            // Le motif est affiché plus petit que sa texture : sans mipmaps, il scintille
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        }
+        fluxNul = texture(gl, 1, 1, new Uint8Array([128, 128, 128, 255]));
+    }
+
+    try {
+        initialiser();
     } catch (erreur) {
         console.warn("HKO : WebGL indisponible —", erreur.message);
         return null;
     }
-
-    const tampon = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, tampon);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-
-    const u = {};
-    const nb = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
-    for (let i = 0; i < nb; i++) {
-        const info = gl.getActiveUniform(prog, i);
-        const nom = info.name.replace(/\[0\]$/, "");
-        u[nom] = gl.getUniformLocation(prog, info.name);
-    }
-
-    let bruit = null;
-    if (source === "satellite") {
-        const b = texteBruit();
-        bruit = texture(gl, b.taille, b.taille, b.octets, true);
-        // Le motif est affiché plus petit que sa texture : sans mipmaps, il scintille
-        gl.generateMipmap(gl.TEXTURE_2D);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    }
-
-    const fluxNul = texture(gl, 1, 1, new Uint8Array([128, 128, 128, 255]));
 
     let sequence = null;
     let textures = [];
     let flux = [];
     let calculEnCours = 0;
 
+    canvas.addEventListener("webglcontextlost", evenement => {
+        // Sans preventDefault, le navigateur ne rendrait jamais le contexte
+        evenement.preventDefault();
+        perdu = true;
+        textures = [];
+        flux = [];
+        calculEnCours++;
+        if (options.surPerte) options.surPerte();
+    });
+
+    canvas.addEventListener("webglcontextrestored", () => {
+        perdu = false;
+        try {
+            initialiser();
+        } catch (erreur) {
+            console.warn("HKO : WebGL non rétabli —", erreur.message);
+            return;
+        }
+        const ancienne = sequence;
+        sequence = null;
+        if (options.surRestauration) options.surRestauration(ancienne);
+        else if (ancienne) charger(ancienne);
+    });
+
     function liberer() {
-        for (const t of textures) gl.deleteTexture(t);
-        for (const f of flux) if (f) gl.deleteTexture(f.texture);
+        calculEnCours++;
+        if (!perdu) {
+            for (const t of textures) if (t) gl.deleteTexture(t);
+            for (const f of flux) if (f) gl.deleteTexture(f.texture);
+        }
         textures = [];
         flux = [];
     }
 
-    function charger(nouvelle) {
+    function rgbaDe(trame, n) {
+        if (trame.rgba) return trame.rgba;
+        const octets = new Uint8Array(n * 4);
+        if (source === "radar") {
+            for (let i = 0; i < n; i++) {
+                octets[i * 4] = trame.plan1[i];
+                octets[i * 4 + 1] = (trame.plan2[i] >> 4) * 17;
+                octets[i * 4 + 2] = (trame.plan2[i] & 15) * 17;
+                octets[i * 4 + 3] = 255;
+            }
+        } else {
+            for (let i = 0; i < n; i++) {
+                octets[i * 4] = (trame.plan1[i] >> 4) * 17;
+                octets[i * 4 + 1] = (trame.plan1[i] & 15) * 17;
+                octets[i * 4 + 2] = (trame.plan2[i] >> 4) * 17;
+                octets[i * 4 + 3] = (trame.plan2[i] & 15) * 17;
+            }
+        }
+        return octets;
+    }
+
+    // Les trames sont envoyées au processeur graphique par paquets de
+    // quelques millisecondes : la page ne se fige pas pendant le chargement.
+    // externe : textures et mouvements fournis plus tard (ajouterTrame, definirFlux).
+    function charger(nouvelle, externe = false) {
         liberer();
         sequence = nouvelle;
+        textures = new Array(sequence.trames.length).fill(null);
+        flux = new Array(Math.max(0, sequence.trames.length - 1)).fill(null);
+        if (perdu) return;
+        const jeton = ++calculEnCours;
+        if (externe) return;
+
         const { nx, ny } = sequence.grille;
         const n = nx * ny;
-
-        for (const trame of sequence.trames) {
-            const octets = new Uint8Array(n * 4);
-            if (source === "radar") {
-                for (let i = 0; i < n; i++) {
-                    octets[i * 4] = trame.plan1[i];
-                    octets[i * 4 + 1] = (trame.plan2[i] >> 4) * 17;
-                    octets[i * 4 + 2] = (trame.plan2[i] & 15) * 17;
-                    octets[i * 4 + 3] = 255;
-                }
-            } else {
-                for (let i = 0; i < n; i++) {
-                    octets[i * 4] = (trame.plan1[i] >> 4) * 17;
-                    octets[i * 4 + 1] = (trame.plan1[i] & 15) * 17;
-                    octets[i * 4 + 2] = (trame.plan2[i] >> 4) * 17;
-                    octets[i * 4 + 3] = (trame.plan2[i] & 15) * 17;
-                }
+        let i = 0;
+        const etape = () => {
+            if (jeton !== calculEnCours || !sequence || perdu) return;
+            const debut = performance.now();
+            while (i < textures.length && performance.now() - debut < 10) {
+                textures[i] = texture(gl, nx, ny, rgbaDe(sequence.trames[i], n));
+                i++;
             }
-            textures.push(texture(gl, nx, ny, octets));
-        }
+            if (i < textures.length) setTimeout(etape, 0);
+            else calculerFlux(jeton);
+        };
+        etape();
+    }
 
-        flux = new Array(Math.max(0, sequence.trames.length - 1)).fill(null);
-        calculerFlux(++calculEnCours);
+    function ajouterTrame(i, rgba) {
+        if (!sequence || perdu || i >= textures.length) return;
+        const { nx, ny } = sequence.grille;
+        if (textures[i]) gl.deleteTexture(textures[i]);
+        textures[i] = texture(gl, nx, ny, rgba);
+    }
+
+    function definirFlux(i, m) {
+        if (!sequence || perdu || i >= flux.length) return;
+        if (flux[i]) gl.deleteTexture(flux[i].texture);
+        flux[i] = m ? { texture: texture(gl, m.bw, m.bh, m.octets), bw: m.bw, bh: m.bh } : null;
     }
 
     // Mouvements calculés par petits paquets, sans figer la page.
@@ -652,19 +743,21 @@ function creer(canvas, source) {
     function calculerFlux(jeton) {
         const { nx, ny } = sequence.grille;
         const n = nx * ny;
-        const champs = sequence.trames.map(t => champSuivi(source, t, n));
+        const champs = new Array(sequence.trames.length);
+        const suivi = j => champs[j] || (champs[j] = champSuivi(source, sequence.trames[j], n));
         let i = 0;
 
         const etape = () => {
-            if (jeton !== calculEnCours || !sequence) return;
+            if (jeton !== calculEnCours || !sequence || perdu) return;
             const debut = performance.now();
             while (i < flux.length && performance.now() - debut < 12) {
                 const ecart = sequence.trames[i + 1].ms - sequence.trames[i].ms;
                 // Après une lacune, pas de mouvement : on ne devine pas.
                 if (ecart <= sequence.pas * 2.5) {
-                    const m = estimerMouvement(champs[i], champs[i + 1], nx, ny);
+                    const m = estimerMouvement(suivi(i), suivi(i + 1), nx, ny);
                     flux[i] = { texture: texture(gl, m.bw, m.bh, m.octets), bw: m.bw, bh: m.bh };
                 }
+                champs[i] = null;
                 i++;
             }
             if (i < flux.length) setTimeout(etape, 0);
@@ -691,14 +784,28 @@ function creer(canvas, source) {
         };
     }
 
+    // Trame chargée la plus proche (pendant le chargement progressif)
+    function disponible(i) {
+        if (textures[i]) return i;
+        for (let d = 1; d < textures.length; d++) {
+            if (textures[i - d]) return i - d;
+            if (textures[i + d]) return i + d;
+        }
+        return -1;
+    }
+
     function dessiner(e) {
+        if (perdu || gl.isContextLost()) return false;
         const W = canvas.width, H = canvas.height;
         gl.viewport(0, 0, W, H);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
-        if (!sequence || !textures.length) return;
+        if (!sequence || !textures.length) return false;
 
-        const s = situation(e.instant);
+        const s = { ...situation(e.instant) };
+        s.avant = disponible(s.avant);
+        s.apres = disponible(s.apres);
+        if (s.avant < 0) return false;
         const g = sequence.grille;
 
         gl.useProgram(prog);
@@ -722,12 +829,14 @@ function creer(canvas, source) {
         gl.bindTexture(gl.TEXTURE_2D, textures[s.apres]);
         gl.uniform1i(u.uB, 1);
 
-        const f = s.avant !== s.apres ? flux[s.avant] : null;
+        const f = s.apres === s.avant + 1 ? flux[s.avant] : null;
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, f ? f.texture : fluxNul);
         gl.uniform1i(u.uFlux, 2);
         gl.uniform2f(u.uFluxEchelle, f ? g.nx / (f.bw * BLOC) : 1, f ? g.ny / (f.bh * BLOC) : 1);
         gl.uniform1f(u.uFlux0, f ? 1 : 0);
+        // Grille OPERA allégée (0,05°) : lissage et fondu gardent leur taille réelle
+        gl.uniform1f(u.uFinesse, sequence.opera ? 0.025 / g.pas : 1);
 
         if (source === "radar") {
             gl.uniform3fv(u.uCouleurs, e.couleurs);
@@ -748,17 +857,30 @@ function creer(canvas, source) {
         }
 
         gl.drawArrays(gl.TRIANGLES, 0, 3);
+        return true;
     }
 
     return {
         charger,
+        ajouterTrame,
+        definirFlux,
         dessiner,
         situation,
+        liberer,
         get sequence() { return sequence; },
-        perdu: () => gl.isContextLost()
+        get pretes() { return textures.filter(Boolean).length; },
+        perdu: () => perdu || gl.isContextLost(),
+        // Test : simule une perte de contexte (extension WEBGL_lose_context)
+        simulerPerte() {
+            const ext = gl.getExtension("WEBGL_lose_context");
+            if (!ext) return false;
+            ext.loseContext();
+            setTimeout(() => ext.restoreContext(), 500);
+            return true;
+        }
     };
 }
 
-window.HKOAnime = { decoder, creer, estimerMouvement, champSuivi, soleilDuJour };
+portee.HKOAnime = { decoder, sequenceBinaire, creer, estimerMouvement, champSuivi, soleilDuJour };
 
-})();
+})(typeof self !== "undefined" ? self : window);

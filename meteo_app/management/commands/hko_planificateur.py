@@ -20,6 +20,7 @@ le temps de publier :
     arome       toutes les 30 min (un nouveau cycle toutes les 3 h)
     purge       une fois par jour, à 3 h 40 (heure de Paris)
     état        toutes les 15 min (affiche les sources en retard)
+    dérivés     toutes les 5 min (hko_derives : images, vidéos, OPERA)
 """
 
 import time
@@ -40,6 +41,8 @@ TACHES = [
     ("satellite", "collecter_satellite", [], 10, 6),
     ("arome", "collecter_arome", [], 30, 20),
     ("etat", "etat_hko", [], 15, 11),
+    # Ressources dérivées (images adaptées, vidéos, trames OPERA) : après les collectes
+    ("derives", "hko_derives", [], 5, 1),
 ]
 
 

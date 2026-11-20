@@ -1,0 +1,15 @@
+# HKO Météo — ressources dérivées, toutes les 5 minutes
+# Activation : sudo systemctl enable --now hko-derives.timer
+# Un passage déjà en cours n'est jamais doublé (verrou « derives »).
+
+[Unit]
+Description=HKO Météo — ressources dérivées, toutes les 5 minutes
+
+[Timer]
+OnCalendar=*:1/5
+Persistent=true
+RandomizedDelaySec=30
+Unit=hko-derives.service
+
+[Install]
+WantedBy=timers.target

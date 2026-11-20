@@ -1,4 +1,4 @@
-{% load static %}
+{% load static hko_statique %}
 
 <!DOCTYPE html>
 <html lang="fr">
@@ -8,33 +8,14 @@
     <meta name="theme-color" content="#06203f">
     <title>HKO Météo — la France observée en temps réel</title>
     <meta name="description" content="Températures, précipitations radar, conditions météo et vue satellite de la France, à partir des mesures de Météo-France et d'EUMETSAT.">
-    <link rel="stylesheet" href="{% static 'meteo_app/css/hko.css' %}?v=71e5b73">
+    <link rel="stylesheet" href="{% static_v 'meteo_app/css/hko.css' %}">
+    <link rel="preload" href="{% static_v 'meteo_app/vendor/d3.v7.min.js' %}" as="script">
 </head>
 
 <body>
 
-<svg width="0" height="0"
-     style="position:absolute" aria-hidden="true">
-    <defs>
-        <filter id="correction-satellite"
-                color-interpolation-filters="sRGB">
-
-            <feColorMatrix type="matrix" values="
-                1.02 0    0    0 0
-                0    0.96 0    0 0
-                0    0    1.04 0 0
-                0    0    0    1 0"/>
-
-            <feConvolveMatrix
-                order="3"
-                kernelMatrix="
-                     0   -0.2  0
-                    -0.2  1.8 -0.2
-                     0   -0.2  0"
-                preserveAlpha="true"/>
-        </filter>
-    </defs>
-</svg>
+<!-- La correction de couleur et de netteté du satellite (ancien filtre SVG
+     #correction-satellite) est désormais appliquée par le serveur aux images. -->
 
 <!-- Séquence d'ouverture : visible pendant le chargement réel du premier tableau -->
 <div id="intro" role="status" aria-live="polite">
@@ -73,6 +54,11 @@
     data-api-carte="{% url 'meteo_app:api_carte' %}"
     data-api-conditions="{% url 'meteo_app:api_conditions' %}"
     data-api-animation="{% url 'meteo_app:api_animation' %}"
+    data-api-satellite="{% url 'meteo_app:api_satellite' %}"
+    data-api-radar="{% url 'meteo_app:api_radar' %}"
+    data-api-journal="{% url 'meteo_app:journal_client' %}"
+    data-script-calcul="{% static_v 'meteo_app/js/hko_calcul.js' %}"
+    data-script-anime="{% static_v 'meteo_app/js/hko_anime.js' %}"
     data-radar="{% url 'meteo_app:fichier_radar' 'radar.json' %}"
     data-statique="{% get_static_prefix %}meteo_app/"
 >
@@ -81,10 +67,11 @@
     <canvas id="fond-precipitations" class="fond" aria-hidden="true"></canvas>
     <canvas id="fond-conditions" class="fond" aria-hidden="true"></canvas>
     <canvas id="fond-satellite" class="fond" aria-hidden="true"></canvas>
+    <div id="video-satellite" class="fond" aria-hidden="true"></div>
+    <canvas id="voile-satellite" class="couche" aria-hidden="true"></canvas>
 
     <!-- Données : températures, nuages observés, radar -->
     <canvas id="champ" class="couche" aria-hidden="true"></canvas>
-    <canvas id="gl-satellite" class="couche" aria-hidden="true"></canvas>
     <canvas id="gl-radar" class="couche" aria-hidden="true"></canvas>
     <img id="radar" class="couche" alt="" aria-hidden="true">
     <canvas id="hachures" class="couche" aria-hidden="true"></canvas>
@@ -187,7 +174,7 @@
                 <button type="button" data-tableau="temperatures" aria-pressed="false"><span class="long">Températures</span><span class="court" aria-hidden="true">Temp.</span></button>
                 <button type="button" data-tableau="precipitations" aria-pressed="false"><span class="long">Précipitations</span><span class="court" aria-hidden="true">Pluie</span></button>
                 <button type="button" data-tableau="conditions" aria-pressed="false">Conditions<span class="suite"> météo</span></button>
-                <button type="button" id="lecture" class="lecture" aria-label="Mettre le défilement en pause"></button>
+                <button type="button" id="lecture" class="lecture" aria-label="Mettre le défilement en pause">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path class="icone-pause" d="M8 5v14M16 5v14"/>
                         <path class="icone-lecture" d="M8 5l11 7-11 7z"/>
@@ -206,9 +193,12 @@
     </p>
 </noscript>
 
-<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-<script src="{% static 'meteo_app/js/hko_anime.js' %}?v=71e5b73"></script>
-<script src="{% static 'meteo_app/js/hko.js' %}?v=71e5b73"></script>
+<!-- D3 servi par le site (v7.9.2, licence ISC : vendor/d3.LICENSE.txt) -->
+<script src="{% static_v 'meteo_app/vendor/d3.v7.min.js' %}"></script>
+<script src="{% static_v 'meteo_app/js/hko_anime.js' %}"></script>
+<script src="{% static_v 'meteo_app/js/hko_calcul.js' %}"></script>
+<script src="{% static_v 'meteo_app/js/hko_satellite.js' %}"></script>
+<script src="{% static_v 'meteo_app/js/hko.js' %}"></script>
 
 </body>
 </html>
