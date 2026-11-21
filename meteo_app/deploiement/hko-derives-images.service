@@ -1,0 +1,28 @@
+# HKO Météo — images satellite fixes (3 profils) et trames OPERA.
+# Léger : ≈ 2,6 s de calcul par nouvelle observation (mesuré sur un cœur).
+# C'est ce que la page affiche à l'ouverture : jamais retardé par une vidéo
+# (verrou « derives_images », distinct de celui des vidéos).
+# Chemins repris de hko-derives.service (À VÉRIFIER sur le serveur).
+
+[Unit]
+Description=HKO Météo — images satellite fixes et trames OPERA
+After=network-online.target
+OnFailure=hko-alerte@hko_derives_images.service
+
+[Service]
+Type=oneshot
+Slice=hko-derives.slice
+User=www-data
+WorkingDirectory=/opt/hashkao
+Environment=DJANGO_SETTINGS_MODULE=hashkao.settings.prod
+Environment=MPLCONFIGDIR=/tmp
+EnvironmentFile=/etc/hashkao.env
+ExecStart=/opt/hashkao/env/bin/python manage.py hko_derives --etapes images,opera
+TimeoutStartSec=4min
+Nice=15
+CPUSchedulingPolicy=batch
+# « best-effort » au plus bas plutôt que « idle » : idle peut être privé de
+# disque indéfiniment dès que d'autres processus lisent ou écrivent.
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryMax=700M

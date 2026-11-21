@@ -1,0 +1,12 @@
+# HKO Météo — enveloppe commune des dérivés (images fixes et vidéos).
+# Les deux services réunis n'utilisent jamais plus d'un cœur ni plus de
+# 1,5 Gio, même s'ils tournent en même temps. Les collectes, Gunicorn et
+# l'application cryptomonnaies restent hors de cette enveloppe.
+
+[Unit]
+Description=HKO Météo — dérivés (enveloppe processeur et mémoire)
+
+[Slice]
+CPUQuota=100%
+MemoryHigh=1200M
+MemoryMax=1500M

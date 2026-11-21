@@ -69,6 +69,17 @@ class CorrectionTests(TestCase):
         self.assertEqual(int(blanc[1, 1, 0]), 255)
 
 
+class CorrectionParBandesTests(TestCase):
+    def test_identique_au_calcul_d_un_bloc(self):
+        # Le traitement par bandes doit donner exactement le même résultat
+        rng = np.random.default_rng(1)
+        image = rng.integers(0, 256, (derives.BANDE * 2 + 37, 41, 3), dtype=np.uint8)
+        par_bandes = derives.corriger_satellite(image)
+        with mock.patch.object(derives, "BANDE", 10 ** 6):
+            d_un_bloc = derives.corriger_satellite(image)
+        np.testing.assert_array_equal(par_bandes, d_un_bloc)
+
+
 class JourneeTests(TestCase):
     def test_changements_d_heure(self):
         heures = lambda j: (derives.bornes_jour(j)[1] - derives.bornes_jour(j)[0]) / timedelta(hours=1)
@@ -127,6 +138,56 @@ class VideoTests(AvecProfilsReduits, TestCase):
         self.assertEqual(index2["images"], 48)
         # Aucun fichier temporaire laissé
         self.assertFalse(list(dossier.glob(".tmp_*")))
+
+    def test_pas_de_video_pour_une_seule_observation(self):
+        jour = date(2026, 11, 18)
+        self.original(datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc))
+        self.assertIsNone(derives.assembler_jour("leger", jour, journal=lambda *_: None))
+        self.assertFalse(list(derives.dossier_video("leger", jour).glob("*.mp4")))
+
+    def test_heures_closes_seulement(self):
+        jour = date(2026, 11, 18)
+        for heure, minute in ((12, 0), (12, 30), (13, 10), (13, 20)):
+            self.original(datetime(2026, 11, 18, heure, minute, tzinfo=timezone.utc))
+        # 13 h 40 : l'heure de 13 h n'est pas close -> vidéo de 12 h seulement
+        index = derives.assembler_jour("leger", jour, journal=lambda *_: None,
+                                       maintenant=datetime(2026, 11, 18, 13, 40, tzinfo=timezone.utc))
+        self.assertEqual(index["images"], 24)
+        self.assertEqual([o["instant"][11:16] for o in index["observations"]], ["12:00", "12:30"])
+        # 14 h 30 : 13 h est close (marge de 25 min)
+        index = derives.assembler_jour("leger", jour, journal=lambda *_: None,
+                                       maintenant=datetime(2026, 11, 18, 14, 30, tzinfo=timezone.utc))
+        self.assertEqual(index["images"], 48)
+        self.assertEqual(len(index["observations"]), 4)
+
+    def test_journee_a_jour_sans_segments_ni_reencodage(self):
+        jour = date(2026, 11, 18)
+        for minute in (0, 10, 20):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc))
+        index = derives.assembler_jour("leger", jour, journal=lambda *_: None)
+        dossier = derives.dossier_video("leger", jour)
+        for segment in dossier.glob("seg_*.mp4"):
+            segment.unlink()                       # comme la purge après 36 h
+        with mock.patch.object(derives, "encoder_segment", side_effect=AssertionError("réencodage inutile")):
+            self.assertEqual(derives.assembler_jour("leger", jour, journal=lambda *_: None)["video"],
+                             index["video"])
+
+    def test_budget_epuise(self):
+        jour = date(2026, 11, 18)
+        for minute in (0, 10):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc))
+        with self.assertRaises(derives.EcheanceAtteinte):
+            derives.assembler_jour("leger", jour, journal=lambda *_: None, echeance=0)
+        self.assertFalse(list(derives.dossier_video("leger", jour).glob("*.mp4")))
+        self.assertIsNotNone(derives.assembler_jour("leger", jour, journal=lambda *_: None))
+
+    def test_un_seul_decodage_pour_trois_profils(self):
+        from PIL import Image
+        original = self.original(datetime(2026, 11, 18, 12, 0, tzinfo=timezone.utc))
+        with mock.patch.object(Image, "open", wraps=Image.open) as ouvrir:
+            self.assertEqual(derives.images_derivees(original, ["haute", "standard", "leger"]), 3)
+        self.assertEqual(ouvrir.call_count, 1)
+        self.assertEqual(derives.images_derivees(original, ["haute", "standard", "leger"]), 0)
 
     def test_api_satellite_et_plage(self):
         jour = date(2026, 11, 18)

@@ -1,0 +1,14 @@
+# HKO Météo — images fixes et OPERA, toutes les 5 minutes
+# Activation : sudo systemctl enable --now hko-derives-images.timer
+
+[Unit]
+Description=HKO Météo — images satellite fixes et OPERA, toutes les 5 minutes
+
+[Timer]
+OnCalendar=*:2/5
+Persistent=true
+RandomizedDelaySec=20
+Unit=hko-derives-images.service
+
+[Install]
+WantedBy=timers.target

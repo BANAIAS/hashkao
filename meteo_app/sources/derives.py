@@ -19,9 +19,13 @@ Principes
   ne voit jamais un fichier en cours d'écriture.
 - Chaque production est idempotente : on ne refait que ce dont les entrées
   ont changé (signature des fichiers sources).
-- Les vidéos sont produites par heure UTC : une nouvelle observation ne
-  réencode que son heure (et la précédente, pour la transition), puis la
-  journée est réassemblée sans réencodage (concaténation).
+- Les vidéos sont produites par heure UTC et, par défaut, seulement pour
+  les heures closes : chaque heure est encodée une fois (sauf observation
+  tardive), puis la journée est réassemblée sans réencodage. L'heure en
+  cours est montrée par les images fixes, produites en priorité.
+- Pas de vidéo pour moins de deux observations : la page affiche l'image.
+- Une journée dont la vidéo est à jour n'est plus touchée, même si ses
+  segments ont été purgés (rattrapage sans réencodage).
 - Les journées sont des journées civiles de Paris : 23, 24 ou 25 heures
   UTC selon les changements d'heure.
 
@@ -43,6 +47,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time as time_module
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -110,6 +115,20 @@ ECART_LACUNE = timedelta(minutes=30)
 # Fondus entre observations : désactivés pour garder le rendu image par
 # image d'origine (direction artistique). Réglage HKO_FONDU_SATELLITE.
 FONDU_DUREE = timedelta(minutes=10)
+
+
+# Heures closes : une heure n'est encodée qu'une fois finie, avec une marge
+# pour l'observation de HH:50 qui arrive après l'heure pleine. Réglage
+# HKO_VIDEO_HEURE_EN_COURS = True pour encoder aussi l'heure en cours
+# (réencodée à chaque nouvelle observation, comme avant).
+MARGE_HEURE_CLOSE = timedelta(minutes=25)
+# Il faut au moins deux observations pour qu'une vidéo ait un sens
+OBSERVATIONS_MIN_VIDEO = 2
+
+
+def reglage(nom, defaut):
+    from django.conf import settings
+    return getattr(settings, nom, defaut)
 
 
 def fondu_actif():
@@ -202,7 +221,26 @@ def corriger_satellite(rgb):
     où #correction-satellite = feColorMatrix diag(1.02, 0.96, 1.04)
                               + feConvolveMatrix [0 -.2 0; -.2 1.8 -.2; 0 -.2 0].
     Chaque étape est bornée à [0, 1], comme dans le navigateur.
+
+    Traité par bandes de lignes (avec une ligne de recouvrement pour la
+    netteté) : résultat identique, mémoire bornée (≈ 60 Mo au lieu de
+    ≈ 800 Mo pour le profil « haute »).
     """
+    hauteur = rgb.shape[0]
+    if hauteur <= BANDE:
+        return _corriger_bloc(rgb, 0, hauteur)
+    sortie = np.empty_like(rgb)
+    for debut in range(0, hauteur, BANDE):
+        fin = min(hauteur, debut + BANDE)
+        sortie[debut:fin] = _corriger_bloc(rgb, debut, fin)
+    return sortie
+
+
+BANDE = 256
+
+
+def _couleur(rgb):
+    """Étapes point par point (contraste, saturation, luminosité, matrice)."""
     x = rgb.astype(np.float32) / 255.0
 
     x = np.clip((x - 0.5) * 1.10 + 0.5, 0, 1)                        # contrast(1.10)
@@ -216,12 +254,23 @@ def corriger_satellite(rgb):
     x = np.clip(x @ m.T, 0, 1)
 
     x = np.clip(x * 1.06, 0, 1)                                        # brightness(1.06)
-    x = np.clip(x * np.array([1.02, 0.96, 1.04], dtype=np.float32), 0, 1)   # feColorMatrix
+    return np.clip(x * np.array([1.02, 0.96, 1.04], dtype=np.float32), 0, 1)   # feColorMatrix
 
-    # feConvolveMatrix, bords dupliqués (edgeMode="duplicate"), diviseur 1
-    p = np.pad(x, ((1, 1), (1, 1), (0, 0)), mode="edge")
-    x = 1.8 * p[1:-1, 1:-1] - 0.2 * (p[:-2, 1:-1] + p[2:, 1:-1] + p[1:-1, :-2] + p[1:-1, 2:])
-    return (np.clip(x, 0, 1) * 255.0 + 0.5).astype(np.uint8)
+
+def _corriger_bloc(rgb, debut, fin):
+    """Lignes [debut, fin) corrigées ; la netteté lit une ligne de part et d'autre."""
+    hauteur = rgb.shape[0]
+    haut, bas = max(0, debut - 1), min(hauteur, fin + 1)
+    x = _couleur(rgb[haut:bas])
+    # Bords de l'image : ligne dupliquée (edgeMode="duplicate")
+    if debut == 0:
+        x = np.concatenate([x[:1], x])
+    if fin == hauteur:
+        x = np.concatenate([x, x[-1:]])
+    # feConvolveMatrix [0 -.2 0; -.2 1.8 -.2; 0 -.2 0], diviseur 1
+    p = np.pad(x, ((0, 0), (1, 1), (0, 0)), mode="edge")
+    y = 1.8 * p[1:-1, 1:-1] - 0.2 * (p[:-2, 1:-1] + p[2:, 1:-1] + p[1:-1, :-2] + p[1:-1, 2:])
+    return (np.clip(y, 0, 1) * 255.0 + 0.5).astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
@@ -232,30 +281,49 @@ def chemin_image(profil, nom_original):
     return racine_derives("geocolour", profil) / nom_original
 
 
-def image_derivee(original, profil, forcer=False):
-    """Produit (si besoin) l'image réduite et corrigée ; renvoie son chemin."""
+def image_a_jour(original, profil):
+    cible = chemin_image(profil, original.name)
+    return cible.exists() and cible.stat().st_mtime >= original.stat().st_mtime
+
+
+def images_derivees(original, profils, forcer=False):
+    """
+    Produit les images manquantes de plusieurs profils à partir d'un seul
+    décodage de l'original (≈ 0,35 s économisée par profil supplémentaire).
+    Renvoie le nombre d'images produites.
+    """
     from PIL import Image
 
-    reglage = PROFILS_SATELLITE[profil]
-    cible = chemin_image(profil, original.name)
-    if not forcer and cible.exists() and cible.stat().st_mtime >= original.stat().st_mtime:
-        return cible
-
+    a_faire = [p for p in profils if forcer or not image_a_jour(original, p)]
+    if not a_faire:
+        return 0
     Image.MAX_IMAGE_PIXELS = None
-    with Image.open(original) as image:
-        image = image.convert("RGB")
-        if reglage["emprise"] != EMPRISE_GEOCOLOUR:
-            boite = boite_originale(reglage["emprise"], image.size)
-            image = image.resize(reglage["taille"], Image.LANCZOS, box=boite)
-        elif image.size != reglage["taille"]:
-            image = image.resize(reglage["taille"], Image.LANCZOS)
-        tableau = corriger_satellite(np.asarray(image))
+    with Image.open(original) as source:
+        source = source.convert("RGB")
+        for profil in a_faire:
+            reglage = PROFILS_SATELLITE[profil]
+            if reglage["emprise"] != EMPRISE_GEOCOLOUR:
+                boite = boite_originale(reglage["emprise"], source.size)
+                image = source.resize(reglage["taille"], Image.LANCZOS, box=boite)
+            elif source.size != reglage["taille"]:
+                image = source.resize(reglage["taille"], Image.LANCZOS)
+            else:
+                image = source
+            tableau = corriger_satellite(np.asarray(image))
+            del image
 
-    def produire(temporaire):
-        Image.fromarray(tableau).save(temporaire, "WEBP", quality=reglage["qualite"], method=4)
+            def produire(temporaire, tableau=tableau, qualite=reglage["qualite"]):
+                Image.fromarray(tableau).save(temporaire, "WEBP", quality=qualite, method=4)
 
-    ecrire_fichier_atomique(cible, produire)
-    return cible
+            ecrire_fichier_atomique(chemin_image(profil, original.name), produire)
+            del tableau
+    return len(a_faire)
+
+
+def image_derivee(original, profil, forcer=False):
+    """Produit (si besoin) l'image réduite et corrigée d'un profil ; renvoie son chemin."""
+    images_derivees(original, [profil], forcer=forcer)
+    return chemin_image(profil, original.name)
 
 
 def lire_image(chemin):
@@ -295,7 +363,7 @@ def observations_du_jour(jour, originaux=None):
     return [(t, c) for t, c in originaux if debut <= t < fin]
 
 
-def plan_du_jour(jour, originaux=None):
+def plan_du_jour(jour, originaux=None, jusqua=None):
     """
     Découpe d'une journée en heures UTC : [(heure, [(o1, o2, t) × 24])].
     Pour chaque image : o1 = observation affichée, o2 = suivante (fondu)
@@ -306,11 +374,12 @@ def plan_du_jour(jour, originaux=None):
     if not obs:
         return []
     fondu = fondu_actif()
+    # jusqua : heure (UTC) exclue et suivantes non produites (heures closes)
     premiere = obs[0][0].replace(minute=0, second=0, microsecond=0)
     derniere = obs[-1][0]
     plan, i = [], 0
     heure = premiere
-    while heure <= derniere:
+    while heure <= derniere and (jusqua is None or heure < jusqua):
         images = []
         for k in range(IMAGES_PAR_HEURE):
             instant = heure + k * PAS_IMAGE
@@ -333,6 +402,10 @@ def signature(*elements):
     return hashlib.sha1(texte.encode()).hexdigest()
 
 
+def reglage_ffmpeg_preset():
+    return reglage("HKO_VIDEO_PRESET", "veryfast")
+
+
 def encoder_segment(profil, images, sortie):
     """Encode les 24 images d'une heure (images tenues ou fondues)."""
     executable = ffmpeg()
@@ -341,6 +414,10 @@ def encoder_segment(profil, images, sortie):
 
     reglage = PROFILS_SATELLITE[profil]
     largeur, hauteur = reglage["taille"]
+    # « veryfast » : 3 fois plus rapide que « medium » pour ces images tenues,
+    # fichier un peu plus petit, PSNR 44,7 dB au lieu de 45,5 (mesuré).
+    # Hors signature : changer le preset ne réencode pas l'existant.
+    preset = reglage_ffmpeg_preset()
     memoire = {}
 
     def pixels(observation):
@@ -355,9 +432,12 @@ def encoder_segment(profil, images, sortie):
             executable, "-y", "-hide_banner", "-loglevel", "error",
             "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{largeur}x{hauteur}", "-r", str(FPS),
             "-i", "-", "-an",
-            "-c:v", "libx264", "-preset", "medium", "-crf", str(reglage["crf"]),
+            "-c:v", "libx264", "-preset", preset, "-crf", str(reglage["crf"]),
             "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", reglage["niveau"],
-            "-g", str(FPS), "-keyint_min", str(FPS), "-sc_threshold", "0", "-threads", "2",
+            "-g", str(FPS), "-keyint_min", str(FPS), "-sc_threshold", "0",
+            # Un seul fil (le service n'a droit qu'à un cœur) et une petite
+            # anticipation : ≈ 650 Mo au lieu de ≈ 940 Mo pour « haute »
+            "-threads", "1", "-rc-lookahead", "10",
             "-movflags", "+faststart", "-f", "mp4", str(temporaire),
         ]
         processus = subprocess.Popen(commande, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -378,57 +458,98 @@ def encoder_segment(profil, images, sortie):
     ecrire_fichier_atomique(sortie, produire)
 
 
-def segments_du_jour(profil, jour, originaux=None, journal=print):
-    """
-    Produit les segments horaires manquants ou périmés ; renvoie
-    [(heure, chemin, images)]. Seules les heures dont le contenu a changé
-    (nouvelle observation, retard, correction) sont réencodées.
-    """
-    dossier = dossier_video(profil, jour)
-    resultat = []
-    for heure, images in plan_du_jour(jour, originaux):
-        nom = f"seg_{heure:%Y%m%dT%H}Z"
-        chemin = dossier / f"{nom}.mp4"
-        meta = dossier / f"{nom}.json"
-        sig = signature(VERSION, profil, FPS, PROFILS_SATELLITE[profil], [
-            (c[1].name, c[1].stat().st_mtime_ns, s[1].name if s else None, t) for c, s, t in images
-        ])
-        actuel = None
-        if meta.exists():
-            try:
-                actuel = json.loads(meta.read_text()).get("signature")
-            except ValueError:
-                actuel = None
-        if not chemin.exists() or actuel != sig:
-            journal(f"  segment {profil} {heure:%Y-%m-%d %H} h UTC")
-            encoder_segment(profil, images, chemin)
-            ecrire_atomique(meta, json.dumps({"signature": sig}).encode())
-        resultat.append((heure, chemin, images))
-    return resultat
+class EcheanceAtteinte(Exception):
+    """Budget de temps du passage épuisé : la suite au passage suivant."""
 
 
-def assembler_jour(profil, jour, originaux=None, journal=print):
+def fin_des_heures_closes(jour, maintenant=None):
     """
-    Assemble les segments du jour en une vidéo (concaténation, sans
-    réencodage) et écrit l'index. Le nom de la vidéo porte une empreinte :
-    un visiteur qui lit l'ancienne version n'est pas interrompu (elle est
-    gardée 30 minutes), et le navigateur peut la garder en cache.
+    Première heure (UTC) à ne pas encoder encore, ou None si toutes les
+    heures de la journée peuvent l'être (journée finie, ou réglage
+    HKO_VIDEO_HEURE_EN_COURS). Une heure H est close quand
+    H + 1 h + MARGE_HEURE_CLOSE est passé.
+    """
+    if reglage("HKO_VIDEO_HEURE_EN_COURS", False):
+        return None
+    maintenant = maintenant or datetime.now(timezone.utc)
+    _, fin = bornes_jour(jour)
+    if maintenant >= fin + MARGE_HEURE_CLOSE:
+        return None
+    return (maintenant - MARGE_HEURE_CLOSE).replace(minute=0, second=0, microsecond=0)
+
+
+def signature_segment(profil, images):
+    # Même formule qu'avant la mise à jour : les segments existants restent valides
+    return signature(VERSION, profil, FPS, PROFILS_SATELLITE[profil], [
+        (c[1].name, c[1].stat().st_mtime_ns, s[1].name if s else None, t) for c, s, t in images
+    ])
+
+
+def segment_a_jour(chemin, sig):
+    meta = chemin.with_suffix(".json")
+    if not chemin.exists() or not meta.exists():
+        return False
+    try:
+        return json.loads(meta.read_text()).get("signature") == sig
+    except ValueError:
+        return False
+
+
+def assembler_jour(profil, jour, originaux=None, journal=print, maintenant=None, echeance=None):
+    """
+    Vidéo de la journée : segments horaires (encodés seulement s'ils
+    manquent ou ont changé), concaténés sans réencodage, et index.
+
+    - Heures closes seulement (voir fin_des_heures_closes) : l'heure en
+      cours est montrée par les images fixes.
+    - Moins de OBSERVATIONS_MIN_VIDEO observations couvertes : pas de vidéo.
+    - Vidéo déjà à jour : rien n'est relu ni réencodé, même si les segments
+      ont été purgés (rattrapage des journées anciennes sans coût).
+    - echeance (time.monotonic()) : au-delà, EcheanceAtteinte est levée
+      avant d'encoder un nouveau segment ; le travail fait est conservé.
+
+    Le nom de la vidéo porte une empreinte : un visiteur qui lit l'ancienne
+    version n'est pas interrompu (elle est gardée 30 minutes).
     """
     originaux = originaux_geocolour() if originaux is None else originaux
-    segments = segments_du_jour(profil, jour, originaux, journal)
-    dossier = dossier_video(profil, jour)
-    if not segments:
+    plan = plan_du_jour(jour, originaux, fin_des_heures_closes(jour, maintenant))
+    if not plan:
+        return None
+    obs = observations_du_jour(jour, originaux)
+    fin_video = plan[-1][0] + timedelta(hours=1)
+    couvertes = [(t, c) for t, c in obs if t < fin_video]
+    if len(couvertes) < OBSERVATIONS_MIN_VIDEO:
         return None
 
-    empreinte = signature([json.loads(c.with_suffix(".json").read_text())["signature"]
-                           for _, c, _ in segments])[:12]
+    dossier = dossier_video(profil, jour)
+    signatures = [signature_segment(profil, images) for _, images in plan]
+    empreinte = signature(signatures)[:12]
     nom_video = f"jour_{empreinte}.mp4"
     video = dossier / nom_video
+    index_chemin = dossier / "index.json"
 
-    if not video.exists():
+    if video.exists():
+        try:
+            index = json.loads(index_chemin.read_text())
+            if index.get("video") == nom_video:
+                return index                     # déjà à jour : rien à faire
+        except (FileNotFoundError, ValueError):
+            pass
+    else:
+        segments = []
+        for (heure, images), sig in zip(plan, signatures):
+            chemin = dossier / f"seg_{heure:%Y%m%dT%H}Z.mp4"
+            if not segment_a_jour(chemin, sig):
+                if echeance is not None and time_module.monotonic() > echeance:
+                    raise EcheanceAtteinte(f"{profil} {jour}")
+                journal(f"  segment {profil} {heure:%Y-%m-%d %H} h UTC")
+                encoder_segment(profil, images, chemin)
+                ecrire_atomique(chemin.with_suffix(".json"), json.dumps({"signature": sig}).encode())
+            segments.append(chemin)
+
         executable = ffmpeg()
         liste = dossier / f".liste_{empreinte}.txt"
-        liste.write_text("".join(f"file '{c.name}'\n" for _, c, _ in segments))
+        liste.write_text("".join(f"file '{c.name}'\n" for c in segments))
 
         def produire(temporaire):
             commande = [executable, "-y", "-hide_banner", "-loglevel", "error",
@@ -442,12 +563,11 @@ def assembler_jour(profil, jour, originaux=None, journal=print):
             ecrire_fichier_atomique(video, produire)
         finally:
             liste.unlink(missing_ok=True)
-        journal(f"  journée {profil} {jour} assemblée : {nom_video}")
+        journal(f"  journée {profil} {jour} assemblée : {nom_video} ({len(couvertes)} observations)")
 
-    debut = segments[0][0]
-    obs = observations_du_jour(jour, originaux)
+    debut = plan[0][0]
     observations = []
-    for i, (instant, _) in enumerate(obs):
+    for i, (instant, _) in enumerate(couvertes):
         prochain = obs[i + 1][0] if i + 1 < len(obs) else None
         observations.append({
             "instant": instant.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -461,22 +581,22 @@ def assembler_jour(profil, jour, originaux=None, journal=print):
         "video": nom_video, "fps": FPS,
         "debut": debut.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "secondes_par_image": PAS_IMAGE.total_seconds(),
-        "images": len(segments) * IMAGES_PAR_HEURE,
+        "images": len(plan) * IMAGES_PAR_HEURE,
         "fondu": fondu_actif(),
         "largeur": largeur, "hauteur": hauteur,
         "emprise": PROFILS_SATELLITE[profil]["emprise"],
         "observations": observations,
         "genere": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    ecrire_atomique(dossier / "index.json", json.dumps(index, separators=(",", ":")).encode())
+    ecrire_atomique(index_chemin, json.dumps(index, separators=(",", ":")).encode())
 
     # Anciennes versions : gardées 30 min pour les lectures en cours
     limite = datetime.now().timestamp() - 1800
     for ancienne in dossier.glob("jour_*.mp4"):
         if ancienne.name != nom_video and ancienne.stat().st_mtime < limite:
             ancienne.unlink(missing_ok=True)
-    # Segments d'heures sorties du plan (observation retirée)
-    heures = {f"seg_{h:%Y%m%dT%H}Z" for h, _, _ in segments}
+    # Segments d'heures sorties du plan (observation retirée, ancienne heure en cours)
+    heures = {f"seg_{h:%Y%m%dT%H}Z" for h, _ in plan}
     for fichier in dossier.glob("seg_*"):
         if fichier.stem not in heures:
             fichier.unlink(missing_ok=True)

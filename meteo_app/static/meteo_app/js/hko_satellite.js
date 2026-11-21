@@ -426,10 +426,14 @@ function creer(options) {
     }
 
     function vitesse(info) {
-        // Une boucle complète dure DUREE_BOUCLE (comme le lecteur d'images)
+        // Même cadence que la frise : la journée entière (vidéo, puis heure
+        // en cours en images fixes) défile en DUREE_BOUCLE. Ainsi le passage
+        // de la vidéo aux images, à la fin de la partie encodée, se fait sans
+        // changement de vitesse.
         const t = sequence.trames;
-        const duree = (Math.min(info.fin, t.at(-1).ms) - t[0].ms) / info.spi / info.fps;
-        return Math.max(0.0625, Math.min(16, duree / (options.dureeBoucle / 1000)));
+        const msParMs = (t.at(-1).ms - t[0].ms) / options.dureeBoucle;     // temps réel / temps écoulé
+        const vitesse = msParMs * 1000 / (info.spi * info.fps);           // secondes de vidéo / seconde
+        return Math.max(0.0625, Math.min(16, vitesse));
     }
 
     // --- Interface ------------------------------------------------------------

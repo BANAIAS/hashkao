@@ -1,0 +1,15 @@
+# HKO Météo — vidéos satellite, toutes les 15 minutes (h + 7, 22, 37, 52)
+# Une heure est close à h + 1 h 25 : elle est encodée au passage de h + 1 h 37.
+# Activation : sudo systemctl enable --now hko-derives-videos.timer
+
+[Unit]
+Description=HKO Météo — vidéos satellite, toutes les 15 minutes
+
+[Timer]
+OnCalendar=*:7/15
+Persistent=true
+RandomizedDelaySec=30
+Unit=hko-derives-videos.service
+
+[Install]
+WantedBy=timers.target

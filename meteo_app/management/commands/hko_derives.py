@@ -1,18 +1,31 @@
 """
 Produit et entretient les ressources dérivées de HKO Météo.
 
-    python manage.py hko_derives                 # récent : images, vidéos du jour (et de la veille), OPERA, purge
-    python manage.py hko_derives --jours 7       # rattrapage des 7 derniers jours (archives existantes)
+    python manage.py hko_derives                          # tout : images, OPERA, vidéos (heures closes), purge
+    python manage.py hko_derives --etapes images,opera    # léger, toutes les 5 min (hko-derives-images)
+    python manage.py hko_derives --etapes videos,purge --budget 240   # toutes les 15 min (hko-derives-videos)
+    python manage.py hko_derives --jours 7 --etapes videos --budget 900   # rattrapage par tranches de 15 min
     python manage.py hko_derives --jour 2026-11-18
-    python manage.py hko_derives --sans-video    # images et OPERA seulement
+    python manage.py hko_derives --profils-video standard,leger
     python manage.py hko_derives --purger --simulation
 
 Sans risque pour les données : seuls des fichiers sous publication/derives/
 sont écrits ou effacés. Relançable à volonté : ce qui est à jour est sauté.
-Prévu pour tourner toutes les 5 minutes (minuterie systemd), avec une
-priorité basse pour ne gêner ni les collectes ni le site.
+
+Deux verrous distincts : « derives_images » (images fixes et OPERA) et
+« derives_videos » (vidéos et purge). Un encodage vidéo en cours ne retarde
+donc jamais les images fixes que la page affiche à l'ouverture.
+
+--budget : au-delà de ce nombre de secondes, aucun nouveau segment vidéo
+n'est commencé ; le travail fait est gardé et la suite reprend au passage
+suivant. Un passage ne déborde ainsi jamais sur le suivant.
+
+Arrêt par systemd (SIGTERM, délai dépassé) : le verrou est rendu et FFmpeg
+arrêté proprement ; aucun fichier partiel n'est visible.
 """
 
+import signal
+import time
 from datetime import date, timedelta
 
 from django.core.management.base import BaseCommand, CommandError
@@ -20,83 +33,139 @@ from django.core.management.base import BaseCommand, CommandError
 from meteo_app.sources import derives
 from meteo_app.sources.commun import DejaEnCours, journal, maintenant, verrou
 
+ETAPES = ("images", "opera", "videos", "purge")
+GROUPES = {"images": "derives_images", "opera": "derives_images",
+           "videos": "derives_videos", "purge": "derives_videos"}
+
+
+def _arret(signum, frame):
+    # Sans ceci, SIGTERM tue Python sans exécuter les « finally » : le verrou
+    # resterait posé une heure et bloquerait les passages suivants.
+    raise SystemExit(128 + signum)
+
 
 class Command(BaseCommand):
     help = "Produit les images satellite réduites, les vidéos H.264 et les trames OPERA ; purge les anciens dérivés."
 
     def add_arguments(self, parser):
         parser.add_argument("--jours", type=int, default=1,
-                            help="Nombre de journées (Paris) à traiter, aujourd'hui compris (défaut : 1, plus la veille avant 1 h).")
+                            help="Nombre de journées (Paris) à traiter, aujourd'hui compris "
+                                 "(défaut : 1, plus la veille jusqu'à 2 h).")
         parser.add_argument("--jour", help="Une journée précise (AAAA-MM-JJ).")
+        parser.add_argument("--etapes", default=",".join(ETAPES),
+                            help="images, opera, videos, purge (défaut : toutes).")
         parser.add_argument("--profils", default=",".join(derives.PROFILS_SATELLITE),
-                            help="Profils à produire (standard,leger).")
+                            help="Profils des images fixes (défaut : haute,standard,leger).")
+        parser.add_argument("--profils-video", default=None,
+                            help="Profils des vidéos (défaut : les mêmes que --profils).")
+        parser.add_argument("--budget", type=int, default=0,
+                            help="Secondes au-delà desquelles aucun nouveau segment vidéo n'est commencé (0 : sans limite).")
+        # Compatibilité avec les anciennes options
         parser.add_argument("--sans-video", action="store_true")
         parser.add_argument("--sans-opera", action="store_true")
         parser.add_argument("--purger", action="store_true", help="Seulement la purge.")
         parser.add_argument("--simulation", action="store_true", help="Avec --purger : n'efface rien.")
 
-    def handle(self, *args, **options):
-        profils = [p for p in options["profils"].split(",") if p]
+    @staticmethod
+    def _profils(texte):
+        profils = [p for p in texte.split(",") if p]
         for p in profils:
             if p not in derives.PROFILS_SATELLITE:
                 raise CommandError(f"Profil inconnu : {p}")
+        return profils
 
-        try:
-            with verrou("derives", duree_max_secondes=3600):
-                with journal("derives", self.stdout) as suivi:
-                    if options["purger"]:
-                        n, o = derives.purger(simulation=options["simulation"])
-                        suivi.succes(f"{'Simulation — ' if options['simulation'] else ''}{n} fichiers, {o / 1e6:.0f} Mo")
-                        return
-                    bilan = self.produire(options, profils)
-                    n, o = derives.purger()
-                    bilan.append(f"purge {n} fichiers ({o / 1e6:.0f} Mo)")
-                    suivi.succes(" ; ".join(bilan))
-        except DejaEnCours as erreur:
-            self.stdout.write(str(erreur))
+    def handle(self, *args, **options):
+        signal.signal(signal.SIGTERM, _arret)
+        self.debut = time.monotonic()
+
+        profils = self._profils(options["profils"])
+        profils_video = self._profils(options["profils_video"] or options["profils"])
+        etapes = [e for e in options["etapes"].split(",") if e]
+        for e in etapes:
+            if e not in ETAPES:
+                raise CommandError(f"Étape inconnue : {e}")
+        if options["sans_video"]:
+            etapes = [e for e in etapes if e != "videos"]
+        if options["sans_opera"]:
+            etapes = [e for e in etapes if e != "opera"]
+        if options["purger"]:
+            etapes = ["purge"]
+
+        groupes = []
+        for e in etapes:
+            if GROUPES[e] not in groupes:
+                groupes.append(GROUPES[e])
+
+        for groupe in groupes:
+            a_faire = [e for e in etapes if GROUPES[e] == groupe]
+            try:
+                with verrou(groupe, duree_max_secondes=3600):
+                    with journal(groupe, self.stdout) as suivi:
+                        bilan = self.executer(a_faire, options, profils, profils_video)
+                        duree = time.monotonic() - self.debut
+                        suivi.succes(" ; ".join(bilan + [f"{duree:.0f} s"]))
+            except DejaEnCours as erreur:
+                self.stdout.write(str(erreur))
 
     def jours(self, options):
         if options["jour"]:
             return [date.fromisoformat(options["jour"])]
         aujourdhui = derives.jour_local(maintenant())
         jours = [aujourdhui - timedelta(days=i) for i in range(max(1, options["jours"]))]
-        # Juste après minuit, la veille peut encore recevoir des observations tardives
-        if options["jours"] == 1 and maintenant().astimezone(derives.PARIS).hour < 1:
+        # Juste après minuit, la veille reçoit encore ses dernières observations
+        # et sa dernière heure se clôt (marge de 25 min)
+        if options["jours"] == 1 and maintenant().astimezone(derives.PARIS).hour < 2:
             jours.append(aujourdhui - timedelta(days=1))
-        return sorted(jours)
+        # Les plus récentes d'abord : c'est ce que les visiteurs regardent
+        return sorted(jours, reverse=True)
 
-    def produire(self, options, profils):
-        ecrire = self.stdout.write
+    def executer(self, etapes, options, profils, profils_video):
         bilan = []
         originaux = derives.originaux_geocolour()
-
         jours = self.jours(options)
 
-        # 1. Images fixes d'abord, les plus récentes en premier : c'est ce
-        #    que la page affiche à l'ouverture. Les vidéos, plus longues à
-        #    produire, viennent ensuite et ne retardent plus les images.
-        for jour in sorted(jours, reverse=True):
-            du_jour = derives.observations_du_jour(jour, originaux)
-            ecrire(f"{jour} : {len(du_jour)} images GeoColour")
-            for profil in profils:
-                faites = 0
-                for instant, original in sorted(du_jour, reverse=True):
-                    avant = derives.chemin_image(profil, original.name)
-                    existait = avant.exists() and avant.stat().st_mtime >= original.stat().st_mtime
-                    derives.image_derivee(original, profil)
-                    faites += not existait
-                if faites:
-                    bilan.append(f"{jour} {profil} : {faites} images")
-
-        # 2. Vidéos (segments horaires modifiés seulement), puis OPERA
-        for jour in sorted(jours, reverse=True):
-            if not options["sans_video"] and derives.observations_du_jour(jour, originaux):
-                for profil in profils:
-                    index = derives.assembler_jour(profil, jour, originaux, journal=ecrire)
-                    if index:
-                        bilan.append(f"{jour} {profil} : vidéo de {len(index['observations'])} observations")
-            if not options["sans_opera"]:
+        if "images" in etapes:
+            bilan.extend(self.images(jours, originaux, profils))
+        if "opera" in etapes:
+            for jour in jours:
                 bilan.extend(self.opera(jour))
+        if "videos" in etapes:
+            bilan.extend(self.videos(jours, originaux, profils_video, options["budget"]))
+        if "purge" in etapes:
+            n, o = derives.purger(simulation=options["simulation"])
+            prefixe = "simulation — " if options["simulation"] else ""
+            bilan.append(f"{prefixe}purge {n} fichiers ({o / 1e6:.0f} Mo)")
+        return bilan
+
+    # Images fixes : les plus récentes d'abord, un seul décodage de
+    # l'original pour tous les profils
+    def images(self, jours, originaux, profils):
+        bilan = []
+        for jour in jours:
+            du_jour = derives.observations_du_jour(jour, originaux)
+            faites = 0
+            for _, original in sorted(du_jour, reverse=True):
+                faites += derives.images_derivees(original, profils)
+            if faites:
+                bilan.append(f"{jour} : {faites} images")
+        return bilan
+
+    def videos(self, jours, originaux, profils, budget):
+        bilan = []
+        echeance = self.debut + budget if budget else None
+        for jour in jours:
+            if not derives.observations_du_jour(jour, originaux):
+                continue
+            for profil in profils:
+                avant = derives.lire_index_video(profil, jour)
+                try:
+                    index = derives.assembler_jour(profil, jour, originaux, journal=self.stdout.write,
+                                                   echeance=echeance)
+                except derives.EcheanceAtteinte:
+                    bilan.append(f"budget de {budget} s atteint : suite au prochain passage")
+                    return bilan
+                if index and (not avant or avant.get("video") != index["video"]):
+                    bilan.append(f"{jour} {profil} : vidéo de {len(index['observations'])} observations")
         return bilan
 
     def opera(self, jour):

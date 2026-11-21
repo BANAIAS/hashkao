@@ -1,0 +1,29 @@
+# HKO Météo — vidéos satellite H.264 (heures closes) et purge des dérivés.
+# Chaque heure n'est encodée qu'une fois, quand elle est close (≈ 6,5 s de
+# calcul pour les 3 profils, mesuré sur un cœur). L'heure en cours est
+# montrée par les images fixes.
+# --budget 300 : au-delà de 5 min, aucun nouveau segment n'est commencé ;
+# la suite reprend au passage suivant (rattrapage par tranches).
+# Chemins repris de hko-derives.service (À VÉRIFIER sur le serveur).
+
+[Unit]
+Description=HKO Météo — vidéos satellite et purge des dérivés
+After=network-online.target
+OnFailure=hko-alerte@hko_derives_videos.service
+
+[Service]
+Type=oneshot
+Slice=hko-derives.slice
+User=www-data
+WorkingDirectory=/opt/hashkao
+Environment=DJANGO_SETTINGS_MODULE=hashkao.settings.prod
+Environment=MPLCONFIGDIR=/tmp
+EnvironmentFile=/etc/hashkao.env
+ExecStart=/opt/hashkao/env/bin/python manage.py hko_derives --etapes videos,purge --budget 300
+TimeoutStartSec=12min
+Nice=15
+CPUSchedulingPolicy=batch
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# FFmpeg ≈ 660 Mo au plus (profil « haute », un fil) + Python ≈ 270 Mo
+MemoryMax=1100M
