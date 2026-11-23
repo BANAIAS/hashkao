@@ -6,62 +6,155 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#06203f">
     <title>Est-ce normal ? — HKO Météo</title>
-    <meta name="description" content="La température du jour à Paris replacée dans plus d'un siècle de mesures à la station de Paris-Montsouris.">
+    <meta name="description" content="La température du jour à Paris comparée au même jour de toutes les années depuis 1900, à la station du parc Montsouris.">
     <link rel="stylesheet" href="{% static 'meteo_app/hko/hko.css' %}">
     <link rel="stylesheet" href="{% static 'meteo_app/hko/normal.css' %}">
 </head>
 
 <body class="page-normal">
 
-<header class="entete-page">
-    <a class="marque" href="{% url 'meteo_app:accueil' %}" aria-label="HKO Météo, retour à la carte">
-        <span class="marque-hko">HKO</span><span class="marque-meteo">Météo</span>
-    </a>
-    <a class="lien-normal" href="{% url 'meteo_app:accueil' %}">Voir la carte</a>
+<!-- Bandeau collant : la marque, la question et la mesure du jour restent visibles -->
+<header class="n-bande" id="n-bande">
+    <div class="n-bande-interieur">
+        <div class="n-marque-ligne">
+            <a class="n-marque" href="{% url 'meteo_app:accueil' %}" aria-label="HKO Météo, retour à la carte">
+                <span class="marque-hko">HKO</span><span class="marque-meteo">Météo</span>
+            </a>
+            <a class="n-lien-carte" href="{% url 'meteo_app:accueil' %}">Voir la carte</a>
+        </div>
+
+        <div class="n-bande-principale">
+            <div class="n-question">
+                <h1>Est-ce <br class="n-coupure">normal ?</h1>
+
+                <div class="n-cadre" aria-live="polite">
+                    <div class="n-cadre-haut">
+                        <p class="n-valeur" id="n-valeur">—</p>
+                        <p class="n-lieu"><span>Paris 14e</span><span class="n-virgule">,</span> <span>parc Montsouris</span></p>
+                    </div>
+                    <div class="n-cadre-bas">
+                        <span id="n-quoi">Au plus chaud de la journée</span>
+                        <span class="n-statut" id="n-statut" hidden>Provisoire</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="n-reglages">
+                <div class="n-jour" role="group" aria-label="Jour étudié">
+                    <button type="button" id="n-precedent" aria-label="Jour précédent">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+                    </button>
+                    <button type="button" class="n-date" id="n-choisir" aria-label="Choisir une date">
+                        <span class="long" id="n-jour-long">&nbsp;</span>
+                        <span class="court" id="n-jour-court">&nbsp;</span>
+                    </button>
+                    <input type="date" id="n-calendrier" min="1900-01-01" tabindex="-1" aria-hidden="true">
+                    <button type="button" id="n-suivant" aria-label="Jour suivant">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+                    </button>
+                </div>
+
+                <div class="bascule" role="group" aria-label="Température étudiée">
+                    <button type="button" data-mode="chaud" aria-pressed="true">
+                        <span class="long">Au plus chaud</span><span class="court">Plus chaud</span>
+                    </button>
+                    <button type="button" data-mode="froid" aria-pressed="false">
+                        <span class="long">Au plus froid</span><span class="court">Plus froid</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </header>
 
 <main id="normal" data-api="{% url 'meteo_app:api_normal' %}">
-
-    <section class="question">
-        <h1>Est-ce normal ?</h1>
-        <p class="chapeau">
-            La température du jour à Paris, replacée dans plus d'un siècle
-            de mesures à la station du parc Montsouris.
-        </p>
-
-        <div class="reglages">
-            <div class="jour" role="group" aria-label="Jour étudié">
-                <button type="button" id="n-precedent" aria-label="Jour précédent">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
-                </button>
-                <p id="n-jour" aria-live="polite">&nbsp;</p>
-                <button type="button" id="n-suivant" aria-label="Jour suivant">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
-                </button>
-            </div>
-
-            <div class="bascule" role="group" aria-label="Température étudiée">
-                <button type="button" data-mode="chaud" aria-pressed="true">Au plus chaud de la journée</button>
-                <button type="button" data-mode="froid" aria-pressed="false">Au plus froid</button>
-            </div>
-        </div>
-    </section>
 
     <p id="n-etat" class="etat" role="status">Lecture des archives…</p>
 
     <div id="n-contenu" hidden>
 
-        <section class="verdict" aria-live="polite">
-            <p class="verdict-mesure" id="n-mesure"></p>
-            <p class="verdict-phrase" id="n-phrase"></p>
-            <p class="verdict-note" id="n-note"></p>
+        <!-- 1. La réponse -->
+        <section class="n-rubrique" id="n-reponse" aria-labelledby="n-verdict">
+            <p class="n-concept">
+                Chaque jour, la température relevée au parc Montsouris, à Paris, est comparée
+                avec celle du même jour de toutes les années depuis 1900.<br>
+                On voit ainsi si la journée est ordinaire pour la saison, ou vraiment inhabituelle.
+            </p>
 
-            <dl class="reperes" id="n-reperes"></dl>
+            <p class="n-verdict" id="n-verdict" aria-live="polite"></p>
+            <p class="n-explication" id="n-explication"></p>
+            <p class="n-note" id="n-note" hidden></p>
+
+            <figure class="n-figure">
+                <figcaption><strong id="n-titre-bande"></strong> <span id="n-legende-bande"></span></figcaption>
+                <div class="graphique" id="g-repartition"></div>
+                <p class="n-cle">
+                    Normal : parmi les 60 % d'années du milieu. Exceptionnel : parmi les 5 % les plus
+                    froides ou les plus chaudes.
+                </p>
+            </figure>
         </section>
 
-        <section class="figure">
-            <h2 id="n-titre-annees"></h2>
-            <p class="legende-figure" id="n-legende-annees"></p>
+        <!-- 2. Le classement -->
+        <section class="n-rubrique" id="n-classement" aria-labelledby="n-titre-classement">
+            <h2 id="n-titre-classement">Le classement</h2>
+
+            <div class="n-rang" id="n-rang-bloc">
+                <p class="n-rang-chiffre" id="n-rang"></p>
+                <p class="n-rang-texte" id="n-rang-texte"></p>
+            </div>
+            <div class="graphique" id="g-classement"></div>
+
+            <div class="n-palmares">
+                <div class="n-carte">
+                    <h3 id="n-titre-liste-1"></h3>
+                    <ol id="n-liste-1"></ol>
+                </div>
+                <div class="n-carte">
+                    <h3 id="n-titre-liste-2"></h3>
+                    <ol id="n-liste-2"></ol>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. La station -->
+        <section class="n-rubrique" id="n-station" aria-labelledby="n-titre-station">
+            <div class="n-station-haut">
+                <div class="n-texte">
+                    <h2 id="n-titre-station">Pourquoi le parc Montsouris ?</h2>
+                    <p>Pour savoir si une température est habituelle, il faut un long passé de mesures
+                        prises au même endroit et de la même façon.</p>
+                    <p>La station du parc Montsouris, dans le 14e arrondissement, tient la plus ancienne
+                        série de relevés ininterrompue de France. Elle sert de référence pour le climat de Paris.</p>
+                    <p>En ville, l'air est un peu plus chaud qu'à la campagne. C'est pourquoi on compare
+                        Montsouris avec Montsouris, jamais avec une autre station.</p>
+                </div>
+
+                {% comment %}
+                Photo de la station : déposer une image libre de droits dans
+                static/meteo_app/hko/montsouris.jpg, puis remplacer ce commentaire par :
+                <figure class="n-photo">
+                    <img src="{% static 'meteo_app/hko/montsouris.jpg' %}" alt="L'abri météo du parc Montsouris" loading="lazy">
+                    <figcaption>Crédit : AUTEUR, LICENCE</figcaption>
+                </figure>
+                {% endcomment %}
+            </div>
+
+            <aside class="n-frise" aria-labelledby="n-titre-reperes">
+                <h3 id="n-titre-reperes">Repères</h3>
+                <ol>
+                    <li><span class="n-annee">1867</span><span>Le pavillon du Bardo, réplique d'un palais tunisien, est construit pour l'Exposition universelle, puis installé dans le parc.</span></li>
+                    <li><span class="n-annee">1872</span><span>Le pavillon devient observatoire météorologique. Les relevés commencent ; ils n'ont jamais été interrompus depuis.</span></li>
+                    <li><span class="n-annee">1900</span><span>Début des relevés quotidiens Météo-France utilisés par HKO pour cette rubrique.</span></li>
+                    <li><span class="n-annee">2011</span><span>Les équipes de Météo-France quittent le parc. Les instruments restent et transmettent leurs mesures à distance.</span></li>
+                </ol>
+            </aside>
+        </section>
+
+        <!-- 4. Explorer -->
+        <section class="n-rubrique" id="n-explorer" aria-labelledby="n-titre-explorer">
+            <h2 id="n-titre-explorer">Explorer depuis 1900</h2>
+            <p class="n-chapo" id="n-legende-annees"></p>
             <div class="graphique" id="g-annees"></div>
             <details>
                 <summary>Voir les valeurs année par année</summary>
@@ -69,46 +162,39 @@
             </details>
         </section>
 
-        <section class="figure">
-            <h2 id="n-titre-repartition"></h2>
-            <p class="legende-figure">
-                Chaque point est une année. Plus la pile est haute, plus cette
-                température est fréquente à cette date.
-            </p>
-            <div class="graphique" id="g-repartition"></div>
-        </section>
+        <!-- 5. Comprendre -->
+        <section class="n-rubrique" id="n-comprendre" aria-labelledby="n-titre-comprendre">
+            <h2 id="n-titre-comprendre">Comprendre la comparaison</h2>
 
-        <section class="figure">
-            <h2>Une journée ne fait pas le climat</h2>
-            <p class="legende-figure" id="n-legende-climat"></p>
-            <div class="graphique" id="g-decennies"></div>
-        </section>
+            <div class="n-questions">
+                <div>
+                    <h3>Qu'est-ce qu'une normale ?</h3>
+                    <p id="n-q-normale">C'est la température moyenne d'une date sur trente ans, ici de 1991 à 2020.
+                        Pour ne pas dépendre du hasard d'une seule journée, on la calcule sur les quinze jours
+                        qui entourent la date.</p>
+                </div>
+                <div>
+                    <h3>Pourquoi comparer le même jour ?</h3>
+                    <p id="n-q-jour"></p>
+                </div>
+                <div>
+                    <h3>Et le réchauffement ?</h3>
+                    <p id="n-q-climat"></p>
+                </div>
+            </div>
 
-        <section class="methode">
-            <h2>Comment lire ces chiffres</h2>
-            <ul>
-                <li>
-                    <strong>La série.</strong> Températures quotidiennes de la station
-                    Météo-France de Paris-Montsouris, <span id="n-periode"></span>.
-                    Seules les valeurs validées par Météo-France sont retenues.
-                </li>
-                <li>
-                    <strong>La normale.</strong> Moyenne des années 1991 à 2020, calculée
-                    sur les quinze jours qui entourent la date. C'est la référence
-                    climatique en vigueur ; elle évite de dépendre du hasard d'un seul jour.
-                </li>
-                <li>
-                    <strong>La mesure du jour.</strong> Plus haute et plus basse valeur
-                    relevées de minuit à minuit, toutes les six minutes. Les archives
-                    utilisent une convention un peu différente (de 6 h à 6 h pour la
-                    maximale) : les deux valeurs peuvent donc légèrement différer.
-                </li>
-                <li>
-                    <strong>Météo ou climat ?</strong> Un jour plus chaud ou plus froid
-                    que la normale relève de la météo : cela arrive chaque année. Le
-                    climat se lit sur des moyennes de plusieurs décennies.
-                </li>
-            </ul>
+            <figure class="n-figure">
+                <figcaption><strong>Une journée ne fait pas le climat : moyenne par décennie.</strong>
+                    <span id="n-legende-decennies"></span></figcaption>
+                <div class="graphique" id="g-decennies"></div>
+            </figure>
+
+            <footer class="n-sources">
+                Sources : relevés quotidiens validés de Météo-France pour Paris-Montsouris
+                (<span id="n-periode">depuis 1900</span>) ; mesure du jour toutes les six minutes,
+                de minuit à minuit. Les archives utilisent une convention un peu différente pour la
+                maximale (de 6 h à 6 h) : les deux valeurs peuvent légèrement différer.
+            </footer>
         </section>
     </div>
 </main>

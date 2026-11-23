@@ -25,4 +25,6 @@ CPUSchedulingPolicy=batch
 # disque indéfiniment dès que d'autres processus lisent ou écrivent.
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
+# Mesuré : ≈ 430 Mo au plus (image « haute »). Freinage au-delà de 550 Mo.
+MemoryHigh=550M
 MemoryMax=700M

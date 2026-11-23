@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HKO Météo — expérience principale (quatre tableaux)
+   HKO Météo — expérience principale (quatre tableaux, trois pour les jours passés)
 
    Chaque tableau a son propre fond et sa propre logique graphique :
 
@@ -7,6 +7,10 @@
      Précipitations  fond sombre, radar animé
      Conditions      aplats de couleurs, pictogrammes
      Satellite       vue de la Terre (Blue Marble), nuages observés animés
+
+   Journées passées (historique) : trois tableaux enchaînés, lus d'eux-mêmes —
+   Satellite (la journée, lue une fois), Résumé (film de 40 s produit chaque
+   nuit à partir des mesures, hko_resume_*.js), Précipitations (radar du jour).
 
    Refonte technique (comportement et rendu inchangés) :
      - calculs lourds (relief, mer, températures, radar) dans un Worker
@@ -31,6 +35,7 @@
      6. Tableau 2 — précipitations (radar)
      7. Tableau 3 — conditions météo (pictogrammes)
      8. Tableau 4 — satellite
+     8 bis. Résumé du jour (journées passées)
      9. Lecture des animations (frise temporelle)
     10. Habillage : bandeau, légendes, bulle, états indisponibles
     11. Navigation : tableaux, défilement automatique, jours
@@ -53,12 +58,16 @@ const URL_ANIMATION = scene.dataset.apiAnimation;
 const URL_SATELLITE = scene.dataset.apiSatellite;
 const URL_RADAR = scene.dataset.apiRadar;
 const URL_JOURNAL = scene.dataset.apiJournal;
+const URL_RESUME = scene.dataset.apiResume;
 const SCRIPT_CALCUL = scene.dataset.scriptCalcul;
 const SCRIPT_ANIME = scene.dataset.scriptAnime;
 const STATIQUE = scene.dataset.statique;
 const PARAMETRES = new URLSearchParams(window.location.search);
 
 const TABLEAUX = ["satellite", "temperatures", "precipitations", "conditions"];
+// Journées passées : satellite, film du jour, radar (températures et conditions
+// du moment n'ont plus de sens une fois la journée close)
+const TABLEAUX_HISTORIQUE = ["resume", "satellite", "precipitations"];
 const DUREE_TABLEAU = 15000;        // défilement automatique
 const REPRISE_AUTO = 60000;         // après un choix manuel
 const RAFRAICHISSEMENT = 6 * 60000; // nouvelles observations du jour
@@ -138,6 +147,7 @@ const etat = {
     jours: new Map(),    // réponses de l'API par jour
     donnees: null,       // réponse du jour affiché
     jour: null,
+    historique: false,   // journée passée : tableaux de l'historique
     tableau: "satellite",
     auto: true,
     rotation: 0,
@@ -1151,7 +1161,8 @@ const DESSINS_FOND = {
     temperatures: dessinerFondTemperatures,
     precipitations: dessinerFondPrecipitations,
     conditions: dessinerFondConditions,
-    satellite: dessinerFondSatellite
+    satellite: dessinerFondSatellite,
+    resume: () => true            // le film dessine son propre fond
 };
 
 // Dessine le fond d'un tableau s'il n'est pas à jour. Les fonds en relief
@@ -2108,6 +2119,285 @@ function satelliteAffiche() {
 }
 
 // ---------------------------------------------------------------------------
+// 8 bis. Résumé du jour (journées passées)
+// ---------------------------------------------------------------------------
+// Le film est joué dans la page à partir de sa partition (un JSON par
+// journée close). Moteur et film ne sont chargés qu'à la première journée
+// passée consultée : la page du jour n'en paie rien.
+
+const DUREE_RESUME = 40;            // secondes
+const IMAGE_FIXE_RESUME = 9.6;      // image montrée sans animation (mouvement réduit)
+
+const resume = {
+    jour: null,
+    statut: "inconnu",   // chargement | pret | absent
+    motif: "",
+    reseau: false,
+    partition: null,
+    film: null,
+    moteur: null,
+    t: 0,
+    lecture: false,
+    boucle: 0,
+    precedent: 0,
+    suite: 0,            // minuterie : tableau suivant après la fin du film
+    promesse: null
+};
+
+const scriptsCharges = new Map();
+function chargerScript(url) {
+    if (!scriptsCharges.has(url)) {
+        scriptsCharges.set(url, new Promise((ok, echec) => {
+            const s = document.createElement("script");
+            s.src = url;
+            s.onload = ok;
+            s.onerror = () => { scriptsCharges.delete(url); echec(new Error(`script ${url}`)); };
+            document.head.appendChild(s);
+        }));
+    }
+    return scriptsCharges.get(url);
+}
+
+let geoResume = null;
+async function preparerMoteurResume() {
+    await chargerScript(scene.dataset.scriptResumeMoteur);
+    await chargerScript(scene.dataset.scriptResumeFilm);
+    if (!geoResume) {
+        geoResume = HKOAnimatique.chargerGeo(scene.dataset.geoResume)
+            .catch(erreur => { geoResume = null; throw erreur; });
+    }
+    await geoResume;
+    if (!resume.moteur) resume.moteur = new HKOAnimatique.Moteur($("toile-resume"));
+}
+
+function chargerResume(jour) {
+    if (resume.jour === jour && resume.promesse) return resume.promesse;
+    resume.jour = jour;
+    resume.statut = "chargement";
+    resume.film = null;
+    resume.partition = null;
+    resume.formatCle = null;
+    resume.promesse = (async () => {
+        try {
+            const reponse = await fetch(`${URL_RESUME}?jour=${encodeURIComponent(jour)}`);
+            const info = await reponse.json().catch(() => ({}));
+            if (!reponse.ok) {
+                if (resume.jour !== jour) return;
+                resume.statut = "absent";
+                resume.reseau = false;
+                resume.motif = info.erreur || "Pas de résumé pour ce jour.";
+                return;
+            }
+            const [partition] = await Promise.all([
+                fetch(info.url).then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); }),
+                preparerMoteurResume()
+            ]);
+            const g = geometrieResume();
+            const film = await HKOResume.construireFilm(partition, g);
+            if (resume.jour !== jour) return;
+            resume.partition = partition;
+            resume.film = film;
+            resume.formatCle = g.cle;
+            resume.moteur.regler(film.format);
+            resume.statut = "pret";
+        } catch (erreur) {
+            if (resume.jour !== jour) return;
+            console.warn("HKO : résumé", erreur);
+            journal({ type: "resume", message: String(erreur.message).slice(0, 200) });
+            resume.statut = "absent";
+            resume.reseau = true;
+            resume.motif = "Le film n'a pas pu être chargé. Vérifiez la connexion, puis réessayez.";
+            resume.promesse = null;          // nouvel essai possible
+        }
+    })();
+    return resume.promesse;
+}
+
+// Téléphone tenu à l'horizontale : le film en 16:9 sur tout l'écran, par-dessus la page
+function resumeImmersif() {
+    return window.innerWidth > window.innerHeight && window.innerHeight <= 520 &&
+        matchMedia("(pointer: coarse)").matches;
+}
+
+// Où et sous quel format jouer le film :
+//   - écran large : 16:9 dans l'espace libre entre l'en-tête et les commandes ;
+//   - téléphone tenu droit : portrait, sur tout cet espace (carte agrandie) ;
+//   - téléphone à l'horizontale, ou plein écran : 16:9 sur tout l'écran.
+function geometrieResume() {
+    const pleinEcran = document.fullscreenElement === $("resume");
+    const immersif = !pleinEcran && resumeImmersif();
+    if (immersif) scene.dataset.resumeImmersif = ""; else delete scene.dataset.resumeImmersif;
+    const cadre = $("resume").getBoundingClientRect();
+    let haut = 0, bas = cadre.height, marge = 0;
+    if (!pleinEcran && !immersif) {
+        haut = Math.max(0, document.querySelector(".entete").getBoundingClientRect().bottom - cadre.top - 12);
+        bas = document.querySelector(".commandes").getBoundingClientRect().top - cadre.top - 10;
+        marge = Math.min(34, Math.max(10, cadre.width * 0.02));
+    }
+    const dispoH = Math.max(120, bas - haut);
+    const portrait = dispoH / Math.max(1, cadre.width - 2 * marge) > 1.2;
+    if (portrait) {
+        // Toute la largeur et toute la hauteur libres : l'image de référence s'y ajuste
+        const largeur = cadre.width, hauteurRef = Math.round(1080 * dispoH / largeur / 10) * 10;
+        return { portrait: true, hauteur: hauteurRef, cle: `p${hauteurRef}`, pleinEcran, immersif,
+                 x: 0, y: haut, largeur, hauteurCss: dispoH, haut };
+    }
+    const dispoL = cadre.width - 2 * marge;
+    const largeur = Math.min(dispoL, dispoH * 16 / 9), hauteurCss = largeur * 9 / 16;
+    return { portrait: false, hauteur: 1080, cle: "l", pleinEcran, immersif,
+             x: (cadre.width - largeur) / 2, y: haut + (dispoH - hauteurCss) / 2, largeur, hauteurCss, haut };
+}
+
+// Reconstruit le film si le format a changé (rotation du téléphone, fenêtre)
+let jetonFormat = 0;
+async function assurerFormatResume(g) {
+    if (!resume.partition || resume.formatCle === g.cle) return;
+    const jeton = ++jetonFormat;
+    const film = await HKOResume.construireFilm(resume.partition, g);
+    if (jeton !== jetonFormat || resume.partition === null) return;
+    resume.film = film;
+    resume.formatCle = g.cle;
+    resume.moteur.regler(film.format);
+    dessinerResume();
+}
+
+function cadrerResume() {
+    const toile = $("toile-resume");
+    const bouton = $("resume-plein-ecran");
+    const g = geometrieResume();
+    Object.assign(toile.style, { left: `${g.x}px`, top: `${g.y}px`, width: `${g.largeur}px`, height: `${g.hauteurCss}px` });
+    // Bouton plein écran : au-dessus du film s'il y a la place, sinon dans son coin
+    const dessus = !g.pleinEcran && !g.portrait && g.y - g.haut > 56;
+    Object.assign(bouton.style, {
+        left: `${g.x + g.largeur - (dessus ? 42 : 52)}px`,
+        top: `${dessus ? g.y - 50 : g.y + (g.portrait ? 64 : 10)}px`
+    });
+    // Téléphone : tourner l'écran suffit pour le plein écran, le bouton s'efface
+    bouton.hidden = g.immersif || g.portrait;
+    bouton.setAttribute("aria-label", g.pleinEcran ? "Quitter le plein écran" : "Voir le film en plein écran");
+    bouton.classList.toggle("actif", g.pleinEcran);
+    if (resume.moteur) {
+        if (resume.formatCle === g.cle) {
+            resume.moteur.redimensionner();
+            dessinerResume();
+        } else {
+            assurerFormatResume(g);
+        }
+    }
+    return g;
+}
+
+function dessinerResume() {
+    const m = resume.moteur;
+    if (!m || !resume.film) return;
+    if (m.film !== resume.film) {
+        m.film = resume.film;
+        for (const k in m.grilles) m.grilles[k].cle = null;
+        m._extremes = null;
+    }
+    m.dessiner(resume.t);
+    majFriseResume();
+}
+
+function montrerResume() {
+    const jour = etat.jour;
+    cadrerResume();
+    chargerResume(jour).then(() => {
+        if (etat.jour !== jour || etat.tableau !== "resume") return;
+        actualiserHabillage();
+        if (resume.statut !== "pret") { planifierDefilement(); return; }
+        construireFriseResume();
+        cadrerResume();
+        lireResume(!reduitMouvement, reduitMouvement ? IMAGE_FIXE_RESUME : 0);
+        planifierDefilement();
+    });
+}
+
+function cacherResume() {
+    cancelAnimationFrame(resume.boucle);
+    resume.boucle = 0;
+    resume.lecture = false;
+    clearTimeout(resume.suite);
+    lecteur.source = null;          // la frise des animations sera reconstruite
+    delete scene.dataset.resumeImmersif;
+    if (document.fullscreenElement === $("resume")) document.exitFullscreen().catch(() => {});
+}
+
+function lireResume(lecture, depuis = null) {
+    if (depuis !== null) resume.t = depuis;
+    if (lecture && resume.t >= DUREE_RESUME - 0.01) resume.t = 0;
+    resume.lecture = lecture;
+    clearTimeout(resume.suite);
+    majBoutonAnimation();
+    cancelAnimationFrame(resume.boucle);
+    dessinerResume();
+    if (lecture) {
+        resume.precedent = performance.now();
+        resume.boucle = requestAnimationFrame(avancerResume);
+    } else {
+        resume.boucle = 0;
+    }
+}
+
+function avancerResume(maintenant) {
+    if (etat.tableau !== "resume" || !resume.lecture) { resume.boucle = 0; return; }
+    const dt = Math.min(0.1, (maintenant - resume.precedent) / 1000);
+    resume.precedent = maintenant;
+    if (!document.hidden) resume.t = Math.min(DUREE_RESUME, resume.t + dt);
+    dessinerResume();
+    if (resume.t >= DUREE_RESUME) {
+        resume.lecture = false;
+        resume.boucle = 0;
+        majBoutonAnimation();
+        // Lecture enchaînée : le tableau suivant, après un temps sur la signature
+        if (etat.auto && etat.historique) resume.suite = setTimeout(tableauSuivant, 1800);
+        return;
+    }
+    resume.boucle = requestAnimationFrame(avancerResume);
+}
+
+const ACTES_RESUME = () => (window.HKOResume && HKOResume.ACTES) || [];
+
+function construireFriseResume() {
+    const actes = ACTES_RESUME();
+    $("frise-reperes").innerHTML = actes.slice(1).map(a =>
+        `<span style="left:${(a.debut / DUREE_RESUME * 100).toFixed(2)}%"></span>`).join("");
+    $("frise-heures").innerHTML = "";
+    majBoutonAnimation();
+}
+
+function formatDuree(s) {
+    const m = Math.floor(s / 60), r = Math.floor(s - m * 60);
+    return `${m}:${String(r).padStart(2, "0")}`;
+}
+
+function majFriseResume() {
+    const part = resume.t / DUREE_RESUME;
+    const curseur = $("frise-curseur");
+    if (document.activeElement !== curseur) curseur.value = Math.round(part * 1000);
+    $("frise").style.setProperty("--avance", part.toFixed(4));
+    const acte = ACTES_RESUME().find(a => resume.t >= a.debut && resume.t < a.fin) || ACTES_RESUME().at(-1);
+    const texte = formatDuree(resume.t), nature = acte ? acte.nom : "";
+    if (texte + nature !== majFriseResume.dernier) {
+        majFriseResume.dernier = texte + nature;
+        $("frise-heure").textContent = texte;
+        $("frise-nature").textContent = nature;
+    }
+}
+
+function basculerPleinEcranResume() {
+    const conteneur = $("resume");
+    if (document.fullscreenElement === conteneur) {
+        document.exitFullscreen().catch(() => {});
+        return;
+    }
+    if (!conteneur.requestFullscreen) return;
+    conteneur.requestFullscreen({ navigationUI: "hide" })
+        .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape").catch(() => {}))
+        .catch(() => {});
+}
+
+// ---------------------------------------------------------------------------
 // 9. Lecture des animations (frise temporelle)
 // ---------------------------------------------------------------------------
 
@@ -2148,7 +2438,8 @@ async function chargerAnimation(source, jour) {
     try {
         const profilRadar = PROFIL.nom === "leger" ? "leger" : "standard";
         const url = MODE_OPERA && source === "radar"
-            ? `${URL_RADAR}?jour=${encodeURIComponent(jour)}&profil=${profilRadar}`
+            ? `${URL_RADAR}?jour=${encodeURIComponent(jour)}&profil=${profilRadar}` +
+              (etat.historique ? "&heures=6&fenetre=resume" : "")
             : source === "satellite"
                 ? `${URL_SATELLITE}?jour=${encodeURIComponent(jour)}&profil=${profilSatellite()}`
                 : `${URL_ANIMATION}?source=${source}&jour=${encodeURIComponent(jour)}`;
@@ -2179,7 +2470,8 @@ async function chargerAnimation(source, jour) {
                     }))
                 };
                 // Journée sans observation : la dernière image connue, à défaut
-                if (!resultat.trames.length && donnees.secours) {
+                // (pas pour une journée passée consultée : l'image d'un autre jour tromperait)
+                if (!resultat.trames.length && donnees.secours && !etat.historique) {
                     resultat.trames = [{ ...donnees.secours, ms: Date.parse(donnees.secours.instant) }];
                     resultat.video = null;
                     resultat.secours = true;
@@ -2347,6 +2639,11 @@ async function preparerAnimation(source) {
     const r = rendu(source);
 
     if (source === "satellite" && sequence.absente) {
+        // Journée passée sans satellite : la lecture enchaînée passe au film
+        if (etat.historique && sourceAffichee() === "satellite") {
+            actualiserHabillage();
+            planifierDefilement();
+        }
         return null;
     }
 
@@ -2410,15 +2707,18 @@ function demarrerLecture(source) {
     lecteur.sequence = sequence;
 
     if (nouvelle) {
-        // Satellite : dernière observation fixe à l'ouverture.
+        // Satellite : dernière observation fixe à l'ouverture (journée en
+        // cours) ; journée passée : la journée lue une fois, du début.
         // Précipitations : lecture automatique dès l'entrée dans le tableau.
-        lecteur.lecture = source === "radar" && !reduitMouvement;
+        lecteur.lecture = (source === "radar" || (source === "satellite" && etat.historique && etat.auto))
+            && !reduitMouvement;
         construireFrise(sequence);
         // On commence au début de la boucle (ou sur la dernière image, sans animation)
         lecteur.instant = lecteur.lecture ? sequence.trames[0].ms : sequence.trames.at(-1).ms;
         lecteur.pause = 0;
     }
     $("frise").hidden = false;
+    majInviteLecture();
 
     cancelAnimationFrame(lecteur.boucle);
     lecteur.precedent = performance.now();
@@ -2426,6 +2726,8 @@ function demarrerLecture(source) {
     lecteur.sale = true;
     dessinerAnimation();
     lecteur.boucle = requestAnimationFrame(avancer);
+    // Journée passée : la fin de lecture du satellite décide du tableau suivant
+    if (nouvelle && etat.historique && source === "satellite") planifierDefilement();
 }
 
 function arreterLecture() {
@@ -2453,6 +2755,15 @@ function avancer(maintenant) {
     if (lecteur.lecture && fin > debut) {
         if (lecteur.instant >= fin) {
             lecteur.pause += dt;
+            if (lecteur.pause >= ARRET_FIN && lecteur.source === "satellite" && etat.historique && etat.auto) {
+                // Journée passée : le satellite est lu une fois, puis le résumé
+                lecteur.lecture = false;
+                lecteur.pause = 0;
+                lecteur.boucle = 0;
+                majBoutonAnimation();
+                tableauSuivant();
+                return;
+            }
             if (lecteur.pause >= ARRET_FIN) {
                 lecteur.instant = debut;
                 lecteur.pause = 0;
@@ -2562,14 +2873,36 @@ function majFrise() {
     }
 }
 
+let satelliteDejaLu = false;
+
+function majInviteLecture() {
+    const bouton = $("invite-lecture");
+    if (!bouton) return;
+    const actif = etat.tableau === "satellite" && lecteur.source === "satellite" && lecteur.sequence;
+    if (actif && lecteur.lecture) satelliteDejaLu = true;
+    const visible = actif && !lecteur.lecture && !satelliteDejaLu && !etat.historique && !$("frise").hidden;
+    bouton.hidden = !visible;
+    bouton.classList.toggle("visible", Boolean(visible));
+}
+
 function majBoutonAnimation() {
+    majInviteLecture();
+    const lecture = etat.tableau === "resume" ? resume.lecture : lecteur.lecture;
     $("frise-lecture").setAttribute("aria-label",
-        lecteur.lecture ? "Mettre l'animation en pause" : "Lire l'animation");
-    $("frise").classList.toggle("en-pause", !lecteur.lecture);
+        etat.tableau === "resume"
+            ? (lecture ? "Mettre le film en pause" : "Lire le film")
+            : (lecture ? "Mettre l'animation en pause" : "Lire l'animation"));
+    $("frise").classList.toggle("en-pause", !lecture);
 }
 
 function installerFrise() {
+    document.getElementById("invite-lecture")?.addEventListener("click", () => document.getElementById("frise-lecture").click());
     $("frise-lecture").addEventListener("click", () => {
+        if (etat.tableau === "resume") {
+            suspendreDefilement();
+            lireResume(!resume.lecture);
+            return;
+        }
         lecteur.lecture = !lecteur.lecture;
         if (lecteur.lecture && lecteur.sequence && lecteur.instant >= lecteur.sequence.trames.at(-1).ms) {
             lecteur.instant = lecteur.sequence.trames[0].ms;
@@ -2582,6 +2915,11 @@ function installerFrise() {
     });
 
     $("frise-curseur").addEventListener("input", evenement => {
+        if (etat.tableau === "resume") {
+            suspendreDefilement();
+            lireResume(false, DUREE_RESUME * Number(evenement.target.value) / 1000);
+            return;
+        }
         const sequence = lecteur.sequence;
         if (!sequence) return;
         lecteur.lecture = false;
@@ -2807,6 +3145,15 @@ function etatIndisponible() {
 
     if (d.erreur) return ["Observations inaccessibles", d.erreur, true];
 
+    if (etat.tableau === "resume") {
+        if (!etat.historique) return ["Pas de résumé pour la journée en cours",
+            "Le film d'une journée est produit dans la nuit qui suit."];
+        if (resume.jour === etat.jour && resume.statut === "absent") {
+            return ["Pas de résumé pour ce jour", resume.motif, resume.reseau];
+        }
+        return null;
+    }
+
     if (etat.tableau === "conditions") {
         const carte = etat.jour && etat.conditions.get(etat.jour);
         if (!carte) return null;                       // encore en chargement
@@ -2821,6 +3168,13 @@ function etatIndisponible() {
         if (d.type === "prevision") {
             return ["Pas d'image satellite pour un jour à venir",
                 "Le satellite montre les nuages observés. Les nuages prévus apparaissent dans les conditions météo."];
+        }
+        // Journée passée : seule la séquence de ce jour compte (l'image encore
+        // affichée peut venir d'un autre jour)
+        const duJour = etat.historique && etat.jour && etat.animations.satellite.get(etat.jour);
+        if (duJour && duJour.absente) {
+            return ["Pas d'image satellite pour ce jour",
+                    duJour.motif || "Les images satellite sont gardées 8 jours.", Boolean(duJour.reseau)];
         }
         if (satelliteAffiche()) return null;
         if (etat.rendus.satellite && etat.rendus.satellite.erreur) {
@@ -2910,6 +3264,13 @@ function actualiserHabillage() {
                    (etat.radar === undefined || !etat.animations.radar.get(etat.jour))) {
             sousTitre = "Chargement du radar…";
         }
+    } else if (etat.tableau === "resume") {
+        titre = "Résumé du jour";
+        if (resume.statut === "pret" && resume.jour === etat.jour) {
+            sousTitre = `${resume.partition.titre} : la journée en 40 secondes, d'après les mesures.`;
+        } else if (resume.statut === "chargement") {
+            sousTitre = "Préparation du film…";
+        }
     } else if (etat.tableau === "conditions") {
         titre = "Conditions météo";
         const carte = carteConditions();
@@ -2948,8 +3309,9 @@ function actualiserHabillage() {
         $("indisponible-action").hidden = !vide[2];
     }
 
-    const anime = (etat.tableau === "precipitations" || etat.tableau === "satellite") &&
-        !vide && lecteur.source === sourceAffichee() && sequenceDuJour(sourceAffichee());
+    const anime = ((etat.tableau === "precipitations" || etat.tableau === "satellite") &&
+        !vide && lecteur.source === sourceAffichee() && sequenceDuJour(sourceAffichee())) ||
+        (etat.tableau === "resume" && !vide && resume.statut === "pret" && resume.jour === etat.jour);
     $("frise").hidden = !anime;
 
     // Radar sans animation (pas d'archive, pas de WebGL) : image publiée seule
@@ -2980,6 +3342,40 @@ function actualiserHabillage() {
 let minuterieDefilement = null;
 let minuterieReprise = null;
 
+const tableauxActifs = () => etat.historique ? TABLEAUX_HISTORIQUE : TABLEAUX;
+
+// Tableau suivant ayant quelque chose à montrer
+function suivantDisponible(depuis) {
+    const liste = tableauxActifs();
+    let suivant = depuis;
+    for (let i = 0; i < liste.length; i++) {
+        suivant = liste[(liste.indexOf(suivant) + 1) % liste.length];
+        if (tableauDisponible(suivant)) break;
+    }
+    return suivant;
+}
+
+function tableauSuivant() {
+    if (!etat.auto) return;
+    afficherTableau(suivantDisponible(etat.tableau));
+}
+
+// Durée du trait de progression : le satellite et le film d'une journée
+// passée avancent à leur rythme (la fin de lecture enchaîne d'elle-même).
+function dureeTableau(tableau) {
+    if (!etat.historique) return DUREE_TABLEAU;
+    if (tableau === "resume") return Math.max(0, DUREE_RESUME - resume.t) * 1000 + 1800;
+    if (tableau === "satellite") {
+        const s = sequenceDuJour("satellite");
+        if (s && lecteur.source === "satellite" && lecteur.lecture) {
+            const debut = s.trames[0].ms, fin = s.trames.at(-1).ms;
+            const reste = fin > debut ? (fin - lecteur.instant) / (fin - debut) : 0;
+            return reste * DUREE_BOUCLE + ARRET_FIN;
+        }
+    }
+    return DUREE_TABLEAU;
+}
+
 function planifierDefilement() {
     clearTimeout(minuterieDefilement);
 
@@ -2990,20 +3386,19 @@ function planifierDefilement() {
     barre.classList.remove("defile");
     if (!actif) return;
 
+    const duree = dureeTableau(etat.tableau);
+    barre.style.setProperty("--duree-tableau", `${Math.round(duree)}ms`);
     void barre.offsetWidth;
     barre.classList.add("defile");
 
-    minuterieDefilement = setTimeout(() => {
-        let suivant = etat.tableau;
+    // Journée passée : satellite et film enchaînent à la fin de leur lecture
+    const parLaLecture = etat.historique && tableauDisponible(etat.tableau) &&
+        (etat.tableau === "resume" ||
+         (etat.tableau === "satellite" && lecteur.lecture && lecteur.source === "satellite"));
+    if (parLaLecture) return;
 
-        // Tableau suivant ayant quelque chose à montrer
-        for (let i = 0; i < TABLEAUX.length; i++) {
-            suivant = TABLEAUX[(TABLEAUX.indexOf(suivant) + 1) % TABLEAUX.length];
-            if (tableauDisponible(suivant)) break;
-        }
-
-        afficherTableau(suivant);
-    }, DUREE_TABLEAU);
+    minuterieDefilement = setTimeout(() => afficherTableau(suivantDisponible(etat.tableau)),
+        etat.historique && !tableauDisponible(etat.tableau) ? 2500 : duree);
 }
 
 // Un choix manuel suspend le défilement ; il reprend seul après une minute.
@@ -3016,12 +3411,18 @@ function suspendreDefilement() {
 }
 
 function afficherTableau(tableau, manuel = false) {
+    if (!tableauxActifs().includes(tableau)) tableau = tableauxActifs()[0];
     const change = tableau !== etat.tableau;
 
     if (manuel) suspendreDefilement();
 
+    if (change && etat.tableau === "resume") cacherResume();
+    // Journée passée : le satellite repart du début à chaque passage
+    if (change && tableau === "satellite" && etat.historique) lecteur.source = null;
+
     etat.tableau = tableau;
     scene.dataset.tableau = tableau;
+    majInviteLecture();
     cacherBulle();
 
     for (const bouton of document.querySelectorAll(".tableaux button[data-tableau]")) {
@@ -3042,6 +3443,8 @@ function afficherTableau(tableau, manuel = false) {
     }
 
     if (tableau === "conditions") preparerConditions();
+
+    if (tableau === "resume") montrerResume();
 
     if (tableau === "satellite") {
         preparerAnimation("satellite");
@@ -3066,6 +3469,8 @@ function afficherTableau(tableau, manuel = false) {
     if (tableau === "temperatures") plusTard(() => { assurerFond("precipitations"); preparerAnimation("radar"); });
     if (tableau === "precipitations") plusTard(() => preparerConditions());
     if (tableau === "conditions") plusTard(() => preparerAnimation("satellite"));
+    if (tableau === "satellite" && etat.historique) plusTard(() => chargerResume(etat.jour));
+    if (tableau === "resume") plusTard(() => { assurerFond("precipitations"); preparerAnimation("radar"); });
 
     planifierDefilement();
 }
@@ -3104,6 +3509,10 @@ function majBoutonLecture() {
 
 function reglerLecture(actif) {
     etat.auto = actif;
+    // Reprise de la lecture enchaînée sur un film arrêté à sa fin
+    if (actif && etat.tableau === "resume" && resume.statut === "pret" && !resume.lecture) {
+        lireResume(!reduitMouvement, resume.t >= DUREE_RESUME - 0.01 ? 0 : null);
+    }
     // Le défilement reprend : les animations aussi
     if (actif && !reduitMouvement && !lecteur.lecture) {
         lecteur.lecture = true;
@@ -3148,12 +3557,19 @@ async function chargerJour(jour, cleProgression) {
     return donnees;
 }
 
-function installerDonnees(donnees) {
+function installerDonnees(donnees, consultee = false) {
     const ancienneDate = etat.donnees?.date;
 
     etat.donnees = donnees;
     etat.jour = donnees.jour;
     etat.conditionsPretes = false;
+
+    // Journée passée choisie par le visiteur : les tableaux de l'historique.
+    // (À l'ouverture, la page reste en direct, même juste après minuit.)
+    etat.historique = Boolean(consultee && donnees.aujourdhui && donnees.jour < donnees.aujourdhui &&
+                              donnees.type !== "prevision");
+    if (etat.historique) scene.dataset.historique = "";
+    else delete scene.dataset.historique;
 
     if (ancienneDate !== donnees.date) {
         // Nouvelle heure d'observation : nouvelle ambiance du fond des
@@ -3189,9 +3605,22 @@ async function allerAuJour(jour) {
 
     if (demande !== demandeJour) return;   // une autre demande est passée devant
 
-    installerDonnees(donnees);
+    const etaitHistorique = etat.historique;
+    installerDonnees(donnees, true);
     lecteur.source = null;                 // la frise repart sur le nouveau jour
     await attendreImage();
+
+    if (etat.historique) {
+        // Entrée dans une journée passée : le Résumé démarre en premier,
+        // puis la lecture enchaîne Satellite et Précipitations.
+        cacherResume();
+        chargerResume(jour);
+        reglerLecture(true);
+        afficherTableau("resume");
+    } else if (etaitHistorique) {
+        cacherResume();
+        afficherTableau("satellite");
+    }
 
     dessinerChamp();
     placerTemperatures();
@@ -3201,7 +3630,7 @@ async function allerAuJour(jour) {
 
     // Si le tableau affiché n'a rien pour ce jour mais qu'un autre en a, on y va.
     if (!tableauDisponible(etat.tableau) && donnees.type !== "prevision") {
-        const autre = TABLEAUX.find(tableauDisponible);
+        const autre = tableauxActifs().find(tableauDisponible);
         if (autre) return afficherTableau(autre);
     }
 
@@ -3221,6 +3650,13 @@ function installerCommandes() {
     $("jour-suivant").addEventListener("click", () => etat.jour && allerAuJour(decalerJour(etat.jour, 1)));
 
     $("indisponible-action").addEventListener("click", () => {
+        if (etat.tableau === "resume") {
+            resume.promesse = null;
+            resume.jour = null;
+            montrerResume();
+            actualiserHabillage();
+            return;
+        }
         etat.jours.delete(etat.jour);
         etat.conditions.delete(etat.jour);
         etat.animations.radar.delete(etat.jour);
@@ -3230,6 +3666,17 @@ function installerCommandes() {
 
     installerFrise();
 
+    // Résumé : clic sur le film pour lire ou mettre en pause ; plein écran
+    $("toile-resume").addEventListener("click", () => {
+        if (resume.statut !== "pret") return;
+        suspendreDefilement();
+        lireResume(!resume.lecture);
+    });
+    $("resume-plein-ecran").addEventListener("click", basculerPleinEcranResume);
+    document.addEventListener("fullscreenchange", () => {
+        if (etat.tableau === "resume") cadrerResume();
+    });
+
     document.addEventListener("keydown", evenement => {
         if (evenement.target.closest("input, select, textarea")) return;
         if (evenement.key === "ArrowLeft" && !$("jour-precedent").disabled) $("jour-precedent").click();
@@ -3238,6 +3685,7 @@ function installerCommandes() {
 
     document.addEventListener("visibilitychange", () => {
         planifierDefilement();
+        if (!document.hidden && etat.tableau === "resume" && resume.lecture) lireResume(true);
         if (!document.hidden && (etat.tableau === "precipitations" || etat.tableau === "satellite")) {
             demarrerLecture(sourceAffichee());
         }
@@ -3324,6 +3772,7 @@ function installerCommandes() {
 function redessiner() {
     cacherBulle();
     cadrer();
+    if (etat.tableau === "resume") cadrerResume();
     assurerFond(etat.tableau);
     dessinerChamp();
     placerTemperatures();
@@ -3494,7 +3943,8 @@ async function demarrer() {
 
 // Essais automatisés (?essai=1) : accès à l'état, sans effet sur la page
 if (PARAMETRES.has("essai")) {
-    window.HKOEssai = { etat, lecteur, assurerFond, dessinerChamp, rendu, calcul, PROFIL };
+    window.HKOEssai = { etat, lecteur, resume, assurerFond, dessinerChamp, rendu, calcul, PROFIL,
+                        allerAuJour, afficherTableau, lireResume };
 }
 
 demarrer();

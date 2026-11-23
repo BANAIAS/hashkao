@@ -7,14 +7,21 @@ HKO Météo — API et fichiers de la refonte technique.
         est prête (index des images : quelle image vidéo correspond à
         quelle observation).
 
-    api/radar/?jour=AAAA-MM-JJ&profil=standard|leger&heures=3
+    api/radar/?jour=AAAA-MM-JJ&profil=standard|leger&heures=3[&fenetre=resume]
         Trames OPERA binaires (deux plans d'octets, compressés gzip).
+        fenetre=resume (jour passé) : finit avec la fenêtre radar du film.
 
     donnees/derives/<chemin>
         Fichiers dérivés. En production, Nginx les sert directement
         (voir deploiement/nginx_hko_refonte.conf) ; cette vue sert de
         secours et en développement, avec prise en charge des requêtes
         partielles (Range) indispensables à la lecture vidéo sur Safari.
+
+    api/resume/?jour=AAAA-MM-JJ
+        Film « Résumé du jour » d'une journée close : adresse de sa
+        partition (fichier JSON figé, mis en cache par le navigateur),
+        titre et date. 404 si la journée n'est pas close ou pas encore
+        résumée.
 
     api/journal/   (POST)
         Petit journal d'erreurs du navigateur (perte de contexte WebGL,
@@ -164,8 +171,15 @@ def api_radar(request):
     if jour == aujourdhui:
         dernier = produits.filter(instant__lte=dj.now()).order_by("-instant").first()
     else:
-        # Comme l'ancienne API : un jour passé est montré jusqu'à 16 h
+        # Comme l'ancienne API : un jour passé est montré jusqu'à 16 h ;
+        # avec fenetre=resume, la fenêtre la plus pluvieuse retenue par le
+        # film « Résumé du jour » (même pluie dans le film et dans le tableau)
         limite = datetime.combine(jour, datetime.min.time().replace(hour=16), tzinfo=derives.PARIS)
+        if request.GET.get("fenetre") == "resume":
+            from .sources import resume
+            partition = resume.lire_partition(jour)
+            if partition and partition.get("radar"):
+                limite = debut + timedelta(hours=partition["radar"]["heures"][-1], minutes=1)
         dernier = produits.filter(instant__gte=debut, instant__lte=limite).order_by("-instant").first()
     if dernier is None:
         return JsonResponse({"erreur": "Aucune image archivée pour ce jour.", "jour": jour.isoformat()}, status=404)
@@ -211,9 +225,11 @@ def api_radar(request):
 MOTIF_DERIVE = re.compile(
     r"^(geocolour/(haute|standard|leger)/geocolour_\d{8}T\d{4}Z\.webp"
     r"|video/(haute|standard|leger)/\d{4}-\d{2}-\d{2}/jour_[0-9a-f]{12}\.mp4"
-    r"|opera/(standard|leger)/\d{8}/opera_\d{8}T\d{4}Z\.bin)$"
+    r"|opera/(standard|leger)/\d{8}/opera_\d{8}T\d{4}Z\.bin"
+    r"|resume/\d{4}-\d{2}-\d{2}\.json)$"
 )
-TYPES = {".webp": "image/webp", ".mp4": "video/mp4", ".bin": "application/octet-stream"}
+TYPES = {".webp": "image/webp", ".mp4": "video/mp4", ".bin": "application/octet-stream",
+         ".json": "application/json"}
 PLAGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 
@@ -271,6 +287,32 @@ def fichier_derive(request, chemin):
     # Chaque nom désigne un contenu figé (empreinte ou heure d'observation)
     reponse["Cache-Control"] = "public, max-age=604800, immutable"
     return reponse
+
+
+# ---------------------------------------------------------------------------
+# Résumé du jour
+# ---------------------------------------------------------------------------
+
+def api_resume(request):
+    from .sources import resume
+
+    try:
+        jour, aujourdhui = _jour(request)
+    except ValueError:
+        return reponse_json(request, {"erreur": "Date invalide."}, statut=400)
+    if jour >= aujourdhui:
+        return reponse_json(request, {"jour": jour.isoformat(), "erreur":
+                            "Le résumé d'une journée est publié dans la nuit qui suit."}, statut=404)
+    chemin = resume.chemin_partition(jour)
+    if not chemin.is_file():
+        return reponse_json(request, {"jour": jour.isoformat(), "erreur":
+                            "Pas de résumé pour ce jour : les mesures n'ont pas été conservées "
+                            "assez longtemps, ou le résumé n'est pas encore prêt."},
+                            cache="public, max-age=600", statut=404)
+    version = int(chemin.stat().st_mtime)
+    url = reverse("meteo_app:fichier_derive", args=[f"resume/{jour.isoformat()}.json"]) + f"?v={version}"
+    return reponse_json(request, {"jour": jour.isoformat(), "url": url, "taille": chemin.stat().st_size},
+                        cache="public, max-age=600")
 
 
 # ---------------------------------------------------------------------------

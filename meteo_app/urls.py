@@ -54,6 +54,7 @@ urlpatterns = [
     # radar OPERA binaire, fichiers dérivés et journal du navigateur
     path("api/satellite/", views_ressources.api_satellite, name="api_satellite"),
     path("api/radar/", views_ressources.api_radar, name="api_radar"),
+    path("api/resume/", views_ressources.api_resume, name="api_resume"),
     path("api/journal/", views_ressources.journal_client, name="journal_client"),
     path("donnees/derives/<path:chemin>", views_ressources.fichier_derive, name="fichier_derive"),
 ]

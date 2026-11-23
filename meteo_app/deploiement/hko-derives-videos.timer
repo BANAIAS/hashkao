@@ -1,14 +1,17 @@
-# HKO Météo — vidéos satellite, toutes les 15 minutes (h + 7, 22, 37, 52)
-# Une heure est close à h + 1 h 25 : elle est encodée au passage de h + 1 h 37.
+# HKO Météo — vidéos satellite, toutes les 15 minutes (h + 9, 24, 39, 54)
+# Une heure est close à h + 1 h 25 : elle est encodée au passage de h + 1 h 39.
+# Décalé des images (h + 2, 7, 12…) : les deux services ne démarrent plus
+# ensemble. Un passage vidéo long peut encore croiser un passage images ;
+# les limites mémoire (MemoryHigh / MemoryMax) en tiennent compte.
 # Activation : sudo systemctl enable --now hko-derives-videos.timer
 
 [Unit]
 Description=HKO Météo — vidéos satellite, toutes les 15 minutes
 
 [Timer]
-OnCalendar=*:7/15
+OnCalendar=*:9/15
 Persistent=true
-RandomizedDelaySec=30
+RandomizedDelaySec=20
 Unit=hko-derives-videos.service
 
 [Install]

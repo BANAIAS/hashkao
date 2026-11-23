@@ -8,20 +8,32 @@ Produit et entretient les ressources dérivées de HKO Météo.
     python manage.py hko_derives --jour 2026-11-18
     python manage.py hko_derives --profils-video standard,leger
     python manage.py hko_derives --purger --simulation
+    python manage.py hko_derives --etapes resume          # résumés des journées closes (hko-derives-resume)
+    python manage.py hko_derives --etapes resume --jour 2026-11-19 --forcer   # refaire un résumé
 
 Sans risque pour les données : seuls des fichiers sous publication/derives/
 sont écrits ou effacés. Relançable à volonté : ce qui est à jour est sauté.
 
-Deux verrous distincts : « derives_images » (images fixes et OPERA) et
-« derives_videos » (vidéos et purge). Un encodage vidéo en cours ne retarde
-donc jamais les images fixes que la page affiche à l'ouverture.
+Trois verrous distincts : « derives_images » (images fixes et OPERA),
+« derives_videos » (vidéos et purge) et « derives_resume » (partitions du
+film « Résumé du jour »). Un encodage vidéo en cours ne retarde donc jamais
+les images fixes que la page affiche à l'ouverture.
+
+Résumé du jour : une partition JSON par journée close (publication/derives/
+resume/), calculée une fois, jamais purgée automatiquement. Sans --jour,
+seules les journées closes des 7 derniers jours dont la partition manque
+sont traitées (la plus récente d'abord).
 
 --budget : au-delà de ce nombre de secondes, aucun nouveau segment vidéo
 n'est commencé ; le travail fait est gardé et la suite reprend au passage
 suivant. Un passage ne déborde ainsi jamais sur le suivant.
 
-Arrêt par systemd (SIGTERM, délai dépassé) : le verrou est rendu et FFmpeg
-arrêté proprement ; aucun fichier partiel n'est visible.
+Verrous : verrous système (flock), rendus par le noyau même si le processus
+est tué brutalement (SIGKILL, oom-kill). Arrêt par systemd (SIGTERM) :
+FFmpeg est arrêté proprement ; aucun fichier partiel n'est visible.
+
+Chaque passage écrit au journal sa durée et sa mémoire maximale (Python et
+FFmpeg séparément), pour suivre la consommation réelle sur le serveur.
 """
 
 import signal
@@ -31,11 +43,29 @@ from datetime import date, timedelta
 from django.core.management.base import BaseCommand, CommandError
 
 from meteo_app.sources import derives
-from meteo_app.sources.commun import DejaEnCours, journal, maintenant, verrou
+from meteo_app.sources.commun import DejaEnCours, journal, maintenant
+from meteo_app.sources.verrous import verrou_noyau
 
-ETAPES = ("images", "opera", "videos", "purge")
+try:
+    import resource
+except ImportError:          # Windows
+    resource = None
+
+ETAPES = ("images", "opera", "videos", "purge", "resume")
 GROUPES = {"images": "derives_images", "opera": "derives_images",
-           "videos": "derives_videos", "purge": "derives_videos"}
+           "videos": "derives_videos", "purge": "derives_videos",
+           "resume": "derives_resume"}
+# « resume » n'est lancé que s'il est demandé : il a son propre service
+ETAPES_PAR_DEFAUT = ("images", "opera", "videos", "purge")
+
+
+def memoire_maximale():
+    """Mémoire résidente maximale (Mo) de ce processus et de ses enfants (FFmpeg)."""
+    if resource is None:
+        return ""
+    python = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
+    enfants = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024
+    return f"mémoire max : Python {python} Mo, FFmpeg {enfants} Mo"
 
 
 def _arret(signum, frame):
@@ -52,8 +82,10 @@ class Command(BaseCommand):
                             help="Nombre de journées (Paris) à traiter, aujourd'hui compris "
                                  "(défaut : 1, plus la veille jusqu'à 2 h).")
         parser.add_argument("--jour", help="Une journée précise (AAAA-MM-JJ).")
-        parser.add_argument("--etapes", default=",".join(ETAPES),
-                            help="images, opera, videos, purge (défaut : toutes).")
+        parser.add_argument("--etapes", default=",".join(ETAPES_PAR_DEFAUT),
+                            help="images, opera, videos, purge, resume (défaut : les quatre premières).")
+        parser.add_argument("--forcer", action="store_true",
+                            help="Avec --etapes resume --jour : refait la partition même si elle existe.")
         parser.add_argument("--profils", default=",".join(derives.PROFILS_SATELLITE),
                             help="Profils des images fixes (défaut : haute,standard,leger).")
         parser.add_argument("--profils-video", default=None,
@@ -99,11 +131,11 @@ class Command(BaseCommand):
         for groupe in groupes:
             a_faire = [e for e in etapes if GROUPES[e] == groupe]
             try:
-                with verrou(groupe, duree_max_secondes=3600):
+                with verrou_noyau(groupe):
                     with journal(groupe, self.stdout) as suivi:
                         bilan = self.executer(a_faire, options, profils, profils_video)
                         duree = time.monotonic() - self.debut
-                        suivi.succes(" ; ".join(bilan + [f"{duree:.0f} s"]))
+                        suivi.succes(" ; ".join(x for x in bilan + [f"{duree:.0f} s", memoire_maximale()] if x))
             except DejaEnCours as erreur:
                 self.stdout.write(str(erreur))
 
@@ -131,6 +163,8 @@ class Command(BaseCommand):
                 bilan.extend(self.opera(jour))
         if "videos" in etapes:
             bilan.extend(self.videos(jours, originaux, profils_video, options["budget"]))
+        if "resume" in etapes:
+            bilan.extend(self.resumes(options))
         if "purge" in etapes:
             n, o = derives.purger(simulation=options["simulation"])
             prefixe = "simulation — " if options["simulation"] else ""
@@ -162,7 +196,8 @@ class Command(BaseCommand):
                     index = derives.assembler_jour(profil, jour, originaux, journal=self.stdout.write,
                                                    echeance=echeance)
                 except derives.EcheanceAtteinte:
-                    bilan.append(f"budget de {budget} s atteint : suite au prochain passage")
+                    bilan.append(f"budget de {budget} s atteint (segment suivant estimé à "
+                                 f"{1.5 * derives.DUREES_SEGMENT.get(profil, 10):.0f} s) : suite au prochain passage")
                     return bilan
                 if index and (not avant or avant.get("video") != index["video"]):
                     bilan.append(f"{jour} {profil} : vidéo de {len(index['observations'])} observations")
@@ -188,3 +223,27 @@ class Command(BaseCommand):
             if faites:
                 bilan.append(f"{jour} OPERA {profil} : {faites} trames")
         return bilan
+
+    def resumes(self, options):
+        from meteo_app.sources import resume
+
+        if options["jour"]:
+            jours = [date.fromisoformat(options["jour"])]
+            if not resume.journee_close(jours[0], maintenant()):
+                return [f"{jours[0]} : journée pas encore close, pas de résumé"]
+        else:
+            jours = resume.jours_a_produire(maintenant())
+        bilan = []
+        for jour in jours[:3]:                 # au plus trois par passage
+            debut = time.monotonic()
+            try:
+                chemin = resume.produire(jour, forcer=options["forcer"])
+            except resume.DonneesInsuffisantes as erreur:
+                bilan.append(f"{jour} : résumé impossible ({erreur})")
+                continue
+            if chemin:
+                bilan.append(f"{jour} : résumé « {resume.lire_partition(jour)['titre']} » "
+                             f"({chemin.stat().st_size // 1024} Ko, {time.monotonic() - debut:.0f} s)")
+            else:
+                bilan.append(f"{jour} : résumé déjà fait")
+        return bilan or ["aucun résumé à produire"]

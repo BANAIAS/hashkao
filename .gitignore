@@ -37,3 +37,13 @@ dist/
 /meteo/data/
 # Données radar et météo locales
 /meteo_app/data/
+
+# Archives et sauvegardes locales HKO
+/HKO_*.zip
+/hko_test_*.tar.gz
+/sauvegarde_*/
+/tmp_opera/
+/tmp_satellite/
+/hko_avant_correctif_claude.js
+/couverture_vent.png
+/communes_stations.json

@@ -327,9 +327,13 @@ def image_derivee(original, profil, forcer=False):
 
 
 def lire_image(chemin):
+    """Pixels RGB (uint8) d'une image ; une seule copie en mémoire."""
     from PIL import Image
     with Image.open(chemin) as image:
-        return np.asarray(image.convert("RGB"))
+        image.load()
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        return np.array(image)
 
 
 # ---------------------------------------------------------------------------
@@ -406,56 +410,117 @@ def reglage_ffmpeg_preset():
     return reglage("HKO_VIDEO_PRESET", "veryfast")
 
 
+# Réglages x264. Images tenues (4 images identiques par observation) : les
+# images B n'apportent presque rien, et chaque image en attente dans
+# l'encodeur coûte ≈ 11 Mo en « haute ». Mesuré sur un segment « haute » :
+#   veryfast, B par défaut, anticipation 10 : 700 Mo, PSNR 44,73 dB, 2029 Ko
+#   veryfast, -bf 0, anticipation 5         : 414 Mo, PSNR 44,48 dB, 1976 Ko
+ENCODAGE_VERSION = 2          # à changer si les réglages ci-dessous changent
+X264_IMAGES_B = 0
+X264_ANTICIPATION = 5
+
+
+def reglages_encodage():
+    """Réglages qui changent le flux produit : ils font partie de la signature des
+    segments, pour qu'une journée ne mélange jamais deux réglages différents."""
+    return {"version": ENCODAGE_VERSION, "preset": reglage_ffmpeg_preset(),
+            "images_b": X264_IMAGES_B, "anticipation": X264_ANTICIPATION}
+
+
+# Fondus calculés par bandes de lignes : même formule, même résultat au bit
+# près, mais ≈ 25 Mo de tableaux temporaires au lieu de ≈ 450 Mo en « haute ».
+BANDE_FONDU = 256
+
+
+def fondre(a, b, part, sortie):
+    """sortie = (a × (1 − part) + b × part + 0,5) tronqué en uint8, par bandes."""
+    for y in range(0, a.shape[0], BANDE_FONDU):
+        bande = a[y:y + BANDE_FONDU].astype(np.float32)
+        bande *= (1 - part)
+        autre = b[y:y + BANDE_FONDU].astype(np.float32)
+        autre *= part
+        bande += autre
+        bande += 0.5
+        sortie[y:y + BANDE_FONDU] = bande.astype(np.uint8)
+    return sortie
+
+
+def commande_ffmpeg(executable, reglage, preset, sortie):
+    largeur, hauteur = reglage["taille"]
+    return [
+        executable, "-nostdin", "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{largeur}x{hauteur}", "-r", str(FPS),
+        "-i", "-", "-an",
+        "-c:v", "libx264", "-preset", preset, "-crf", str(reglage["crf"]),
+        "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", reglage["niveau"],
+        "-g", str(FPS), "-keyint_min", str(FPS), "-sc_threshold", "0",
+        # Un seul fil (le service n'a droit qu'à un cœur), pas d'images B et
+        # une courte anticipation : mémoire de FFmpeg ≈ 400 Mo en « haute »
+        "-threads", "1", "-bf", str(X264_IMAGES_B), "-rc-lookahead", str(X264_ANTICIPATION),
+        "-movflags", "+faststart", "-f", "mp4", str(sortie),
+    ]
+
+
+# Durées d'encodage observées (s), par profil : servent au budget anticipé
+DUREES_SEGMENT = {"haute": 12.0, "standard": 6.0, "leger": 3.0}
+
+
 def encoder_segment(profil, images, sortie):
-    """Encode les 24 images d'une heure (images tenues ou fondues)."""
+    """Encode les 24 images d'une heure (images tenues ou fondues).
+
+    Mémoire bornée : au plus deux images décodées (l'observation affichée et
+    la suivante), un seul tampon pour les fondus, et les pixels passent à
+    FFmpeg sans copie intermédiaire.
+    """
     executable = ffmpeg()
     if not executable:
         raise RuntimeError("FFmpeg introuvable : installez-le ou « pip install imageio-ffmpeg ».")
 
     reglage = PROFILS_SATELLITE[profil]
     largeur, hauteur = reglage["taille"]
-    # « veryfast » : 3 fois plus rapide que « medium » pour ces images tenues,
-    # fichier un peu plus petit, PSNR 44,7 dB au lieu de 45,5 (mesuré).
-    # Hors signature : changer le preset ne réencode pas l'existant.
     preset = reglage_ffmpeg_preset()
-    memoire = {}
+    decodees = {}                 # au plus 2 images : la courante et la suivante
+    tampon = None
 
     def pixels(observation):
-        if observation[1] not in memoire:
-            if len(memoire) > 3:
-                memoire.clear()
-            memoire[observation[1]] = lire_image(image_derivee(observation[1], profil))
-        return memoire[observation[1]]
+        cle = observation[1]
+        if cle not in decodees:
+            while len(decodees) >= 2:
+                decodees.pop(next(iter(decodees)))
+            decodees[cle] = lire_image(image_derivee(cle, profil))
+        return decodees[cle]
 
     def produire(temporaire):
-        commande = [
-            executable, "-y", "-hide_banner", "-loglevel", "error",
-            "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{largeur}x{hauteur}", "-r", str(FPS),
-            "-i", "-", "-an",
-            "-c:v", "libx264", "-preset", preset, "-crf", str(reglage["crf"]),
-            "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", reglage["niveau"],
-            "-g", str(FPS), "-keyint_min", str(FPS), "-sc_threshold", "0",
-            # Un seul fil (le service n'a droit qu'à un cœur) et une petite
-            # anticipation : ≈ 650 Mo au lieu de ≈ 940 Mo pour « haute »
-            "-threads", "1", "-rc-lookahead", "10",
-            "-movflags", "+faststart", "-f", "mp4", str(temporaire),
-        ]
-        processus = subprocess.Popen(commande, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+        nonlocal tampon
+        processus = subprocess.Popen(commande_ffmpeg(executable, reglage, preset, temporaire),
+                                     stdin=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
             for courante, suivante, part in images:
                 image = pixels(courante)
                 if suivante and part > 0:
-                    autre = pixels(suivante)
-                    image = (image.astype(np.float32) * (1 - part) + autre.astype(np.float32) * part + 0.5).astype(np.uint8)
-                processus.stdin.write(np.ascontiguousarray(image).tobytes())
+                    if tampon is None:
+                        tampon = np.empty((hauteur, largeur, 3), np.uint8)
+                    image = fondre(image, pixels(suivante), part, tampon)
+                processus.stdin.write(memoryview(np.ascontiguousarray(image)).cast("B"))
             processus.stdin.close()
         except BrokenPipeError:
             pass
+        except BaseException:
+            processus.kill()          # arrêt demandé : FFmpeg ne survit pas
+            processus.wait()
+            raise
         erreur = processus.stderr.read().decode(errors="replace")
         if processus.wait() != 0:
             raise RuntimeError(f"FFmpeg a échoué : {erreur.strip()[:500]}")
 
-    ecrire_fichier_atomique(sortie, produire)
+    debut = time_module.monotonic()
+    try:
+        ecrire_fichier_atomique(sortie, produire)
+    finally:
+        decodees.clear()
+    duree = time_module.monotonic() - debut
+    # Moyenne glissante : le budget s'adapte à la charge réelle du serveur
+    DUREES_SEGMENT[profil] = 0.7 * DUREES_SEGMENT.get(profil, duree) + 0.3 * duree
 
 
 class EcheanceAtteinte(Exception):
@@ -479,8 +544,11 @@ def fin_des_heures_closes(jour, maintenant=None):
 
 
 def signature_segment(profil, images):
-    # Même formule qu'avant la mise à jour : les segments existants restent valides
-    return signature(VERSION, profil, FPS, PROFILS_SATELLITE[profil], [
+    # Les réglages d'encodage en font partie : changer de réglage réencode la
+    # journée en cours (par tranches, voir --budget) au lieu de mélanger dans
+    # un même MP4 des segments encodés différemment. Les journées passées
+    # déjà assemblées ne sont pas reprises par la minuterie.
+    return signature(VERSION, profil, FPS, PROFILS_SATELLITE[profil], reglages_encodage(), [
         (c[1].name, c[1].stat().st_mtime_ns, s[1].name if s else None, t) for c, s, t in images
     ])
 
@@ -540,7 +608,10 @@ def assembler_jour(profil, jour, originaux=None, journal=print, maintenant=None,
         for (heure, images), sig in zip(plan, signatures):
             chemin = dossier / f"seg_{heure:%Y%m%dT%H}Z.mp4"
             if not segment_a_jour(chemin, sig):
-                if echeance is not None and time_module.monotonic() > echeance:
+                # Budget anticipé : on ne commence pas un segment qui finirait
+                # probablement après l'échéance (durée observée × 1,5)
+                prevue = 1.5 * DUREES_SEGMENT.get(profil, 10.0)
+                if echeance is not None and time_module.monotonic() + prevue > echeance:
                     raise EcheanceAtteinte(f"{profil} {jour}")
                 journal(f"  segment {profil} {heure:%Y-%m-%d %H} h UTC")
                 encoder_segment(profil, images, chemin)
@@ -732,9 +803,10 @@ def purger(duree=None, simulation=False):
                     effacer(fichier)
                 if not simulation:
                     shutil.rmtree(dossier, ignore_errors=True)
-    # Fichiers temporaires abandonnés (interruption brutale)
+    # Fichiers temporaires et listes d'assemblage abandonnés (arrêt brutal)
     vieux = datetime.now().timestamp() - 3600
-    for fichier in racine_derives().rglob(".tmp_*"):
-        if fichier.stat().st_mtime < vieux:
-            effacer(fichier)
+    for motif in (".tmp_*", ".liste_*"):
+        for fichier in racine_derives().rglob(motif):
+            if fichier.stat().st_mtime < vieux:
+                effacer(fichier)
     return nombre, octets

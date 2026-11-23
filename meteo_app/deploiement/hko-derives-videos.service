@@ -25,5 +25,9 @@ Nice=15
 CPUSchedulingPolicy=batch
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
-# FFmpeg ≈ 660 Mo au plus (profil « haute », un fil) + Python ≈ 270 Mo
+# Mesuré (rattrapage de 8 h, profil « haute ») : Python ≈ 215 Mo + FFmpeg
+# ≈ 400 Mo. MemoryHigh : au-delà, le noyau freine le service et récupère
+# d'abord son cache disque (MP4 écrits) au lieu de tuer un processus.
+# MemoryMax inchangé : limite dure.
+MemoryHigh=800M
 MemoryMax=1100M

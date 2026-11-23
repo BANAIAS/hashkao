@@ -1016,3 +1016,120 @@ button { font: inherit; color: inherit; }
 :is([data-tableau="satellite"], [data-tableau="precipitations"]) #frise-nature::after {
     content: " :";
 }
+/* --------------------------------------------------------------------------
+   Journées passées : trois tableaux (Satellite, Résumé, Précipitations)
+   -------------------------------------------------------------------------- */
+#scene:not([data-historique]) .tableaux button[data-tableau="resume"],
+#scene[data-historique] .tableaux button[data-tableau="temperatures"],
+#scene[data-historique] .tableaux button[data-tableau="conditions"] {
+    display: none;
+}
+
+/* Résumé du jour : le film en 16:9 dans l'espace libre (cadré par hko.js) */
+#resume {
+    background: radial-gradient(120% 90% at 50% 40%, #0f4380 0%, var(--nuit) 62%);
+}
+
+#scene[data-tableau="resume"] #resume {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#toile-resume {
+    position: absolute;
+    display: block;
+    cursor: pointer;
+    box-shadow: 0 18px 60px rgba(0, 8, 24, 0.55);
+}
+
+#resume-plein-ecran {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    color: var(--ecume);
+    background: rgba(6, 18, 36, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 150ms, background 150ms;
+}
+
+#resume-plein-ecran[hidden] { display: none; }
+
+#resume-plein-ecran:hover,
+#resume-plein-ecran:focus-visible { opacity: 1; background: rgba(6, 18, 36, 0.85); }
+#resume-plein-ecran svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+#resume-plein-ecran .icone-reduire,
+#resume-plein-ecran.actif .icone-agrandir { display: none; }
+#resume-plein-ecran.actif .icone-reduire { display: block; }
+
+#resume:fullscreen { background: #000; }
+
+/* Téléphone à l'horizontale : le film en 16:9 sur tout l'écran, par-dessus la page */
+#scene[data-tableau="resume"][data-resume-immersif] #resume {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: #000;
+}
+#scene[data-resume-immersif] #toile-resume { box-shadow: none; }
+
+/* Téléphone tenu droit : le film occupe toute la largeur, sans cadre */
+@media (max-width: 760px) and (orientation: portrait) {
+    #toile-resume { box-shadow: none; }
+}
+#resume:fullscreen #toile-resume { box-shadow: none; }
+
+/* Le film porte ses propres titres : le bandeau s'efface */
+#scene[data-tableau="resume"] .bandeau { visibility: hidden; }
+#scene[data-tableau="resume"] .entete {
+    background: linear-gradient(to bottom, rgba(2, 8, 18, 0.7), rgba(2, 8, 18, 0));
+}
+#scene[data-tableau="resume"] .pied { background: none; }
+
+/* Frise du film : chapitres sous la piste, temps écoulé à droite */
+[data-tableau="resume"] .frise-heures span { font-size: 11px; }
+[data-tableau="resume"] .frise-temps { min-width: 6.2em; }
+
+@media (max-width: 760px) {
+    [data-tableau="resume"] .frise-heures { display: none; }
+    #resume-plein-ecran { width: 38px; height: 38px; }
+}
+/* Bouton central de lecture satellite */
+.invite-lecture {
+    position: absolute;
+    z-index: 5;
+    left: 50%;
+    top: 50%;
+    width: clamp(64px, 7vw, 92px);
+    height: clamp(64px, 7vw, 92px);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1.5px solid rgba(255,255,255,.55);
+    border-radius: 50%;
+    background: rgba(6,32,63,.28);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    color: white;
+    cursor: pointer;
+    opacity: 0;
+    transform: translate(-50%,-50%) scale(.92);
+    transition: opacity .3s, transform .3s;
+}
+.invite-lecture[hidden] { display: none; }
+.invite-lecture.visible {
+    opacity: .85;
+    transform: translate(-50%,-50%) scale(1);
+}
+.invite-lecture:hover,
+.invite-lecture:focus-visible { opacity: 1; }
+.invite-lecture svg {
+    width: 46%;
+    height: 46%;
+    fill: currentColor;
+}

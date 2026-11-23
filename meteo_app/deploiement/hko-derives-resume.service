@@ -1,0 +1,26 @@
+# HKO Météo — film « Résumé du jour » : une partition JSON par journée close.
+# Calcul mesuré sur deux journées réelles : ≈ 10 s, Python ≈ 260 Mo.
+# Idempotent : une journée déjà résumée est sautée ; au plus trois par passage.
+# Chemins repris de hko-derives.service (À VÉRIFIER sur le serveur).
+
+[Unit]
+Description=HKO Météo — résumés des journées closes
+After=network-online.target
+OnFailure=hko-alerte@hko_derives_resume.service
+
+[Service]
+Type=oneshot
+Slice=hko-derives.slice
+User=www-data
+WorkingDirectory=/opt/hashkao
+Environment=DJANGO_SETTINGS_MODULE=hashkao.settings.prod
+Environment=MPLCONFIGDIR=/tmp
+EnvironmentFile=/etc/hashkao.env
+ExecStart=/opt/hashkao/env/bin/python manage.py hko_derives --etapes resume
+TimeoutStartSec=10min
+Nice=15
+CPUSchedulingPolicy=batch
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryHigh=500M
+MemoryMax=700M

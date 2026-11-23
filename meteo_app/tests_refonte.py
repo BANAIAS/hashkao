@@ -10,6 +10,12 @@ restent rapides. Les tests vidéo sont sautés si FFmpeg est introuvable.
 
 import gzip
 import json
+import os
+import signal
+import subprocess
+import sys
+import time
+import weakref
 from datetime import date, datetime, timedelta, timezone
 from unittest import mock, skipUnless
 
@@ -297,3 +303,164 @@ class GabaritTests(TestCase):
         self.assertRegex(rendu, r"meteo_app/js/hko\.js\?v=[0-9a-f]{10}$")
         absent = Template("{% load hko_statique %}{% static_v 'meteo_app/absent.js' %}").render(Context())
         self.assertNotIn("?v=", absent)
+
+
+# ---------------------------------------------------------------------------
+# Mémoire de l'encodage, verrou noyau, budget, réglages d'encodage
+# ---------------------------------------------------------------------------
+
+def fondu_d_origine(a, b, part):
+    """Formule de e7c47c0 / 750737b (référence)."""
+    return (a.astype(np.float32) * (1 - part) + b.astype(np.float32) * part + 0.5).astype(np.uint8)
+
+
+class FonduTests(TestCase):
+    def test_identique_au_bit_pres(self):
+        rng = np.random.default_rng(3)
+        # Hauteur non multiple de la bande, valeurs extrêmes comprises
+        a = rng.integers(0, 256, (derives.BANDE_FONDU * 2 + 61, 53, 3), dtype=np.uint8)
+        b = rng.integers(0, 256, a.shape, dtype=np.uint8)
+        a[0, 0] = 255
+        b[0, 0] = 255
+        a[1, 1] = 0
+        b[1, 1] = 0
+        sortie = np.empty_like(a)
+        for part in (0.001, 0.125, 0.25, 1 / 3, 0.5, 0.75, 0.875, 0.999):
+            np.testing.assert_array_equal(derives.fondre(a, b, part, sortie), fondu_d_origine(a, b, part))
+
+
+@skipUnless(ffmpeg_present(), "FFmpeg introuvable")
+class EncodageTests(AvecProfilsReduits, TestCase):
+    def test_au_plus_deux_images_en_memoire_avec_fondus(self):
+        jour = date(2026, 11, 18)
+        for minute in (0, 10, 20, 30, 40, 50):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc), 60 + 3 * minute)
+        vivantes, pic = set(), [0]
+        lire = derives.lire_image
+
+        def lire_suivie(chemin):
+            tableau = lire(chemin)
+            cle = id(tableau)
+            vivantes.add(cle)
+            weakref.finalize(tableau, vivantes.discard, cle)
+            pic[0] = max(pic[0], len(vivantes))
+            return tableau
+
+        with self.settings(HKO_FONDU_SATELLITE=True), mock.patch.object(derives, "lire_image", lire_suivie):
+            plan = derives.plan_du_jour(jour)
+            self.assertTrue(any(t > 0 for _, _, t in plan[0][1]))          # il y a bien des fondus
+            derives.encoder_segment("leger", plan[0][1], derives.dossier_video("leger", jour) / "s.mp4")
+        self.assertLessEqual(pic[0], 2)
+
+    def test_flux_sans_images_b_et_decodable(self):
+        jour = date(2026, 11, 18)
+        for minute in (0, 10, 20):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc))
+        self.original(datetime(2026, 11, 18, 13, 5, tzinfo=timezone.utc))
+        index = derives.assembler_jour("leger", jour, journal=lambda *_: None)
+        video = derives.dossier_video("leger", jour) / index["video"]
+        sonde = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                                "-show_entries", "stream=has_b_frames,nb_frames", "-of", "csv=p=0", str(video)],
+                               capture_output=True, text=True)
+        if sonde.returncode == 0 and sonde.stdout.strip():
+            images_b, nombre = sonde.stdout.strip().split(",")[:2]
+            self.assertEqual(images_b, "0")
+            self.assertEqual(int(nombre), 48)
+        decodage = subprocess.run([derives.ffmpeg(), "-nostdin", "-v", "error", "-i", str(video), "-f", "null", "-"],
+                                  capture_output=True, text=True)
+        self.assertEqual(decodage.returncode, 0)
+        self.assertEqual(decodage.stderr.strip(), "")
+
+    def test_budget_anticipe(self):
+        jour = date(2026, 11, 18)
+        for minute in (0, 10):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc))
+        with mock.patch.dict(derives.DUREES_SEGMENT, {"leger": 1000.0}):
+            with self.assertRaises(derives.EcheanceAtteinte):
+                derives.assembler_jour("leger", jour, journal=lambda *_: None,
+                                       echeance=time.monotonic() + 100)
+        with mock.patch.dict(derives.DUREES_SEGMENT, {"leger": 0.01}):
+            self.assertIsNotNone(derives.assembler_jour("leger", jour, journal=lambda *_: None,
+                                                        echeance=time.monotonic() + 100))
+
+    def test_signature_suit_les_reglages_d_encodage(self):
+        jour = date(2026, 11, 18)
+        for minute in (0, 10):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc))
+        images = derives.plan_du_jour(jour)[0][1]
+        reference = derives.signature_segment("leger", images)
+        self.assertEqual(derives.signature_segment("leger", images), reference)      # stable
+        with mock.patch.object(derives, "X264_ANTICIPATION", 7):
+            self.assertNotEqual(derives.signature_segment("leger", images), reference)
+        with self.settings(HKO_VIDEO_PRESET="fast"):
+            self.assertNotEqual(derives.signature_segment("leger", images), reference)
+
+    def test_changement_de_reglage_reencode_toute_la_journee(self):
+        # Une journée ne mélange jamais deux réglages d'encodage
+        jour = date(2026, 11, 18)
+        for minute in (0, 10):
+            self.original(datetime(2026, 11, 18, 12, minute, tzinfo=timezone.utc))
+        self.original(datetime(2026, 11, 18, 13, 0, tzinfo=timezone.utc))
+        premier = derives.assembler_jour("leger", jour, journal=lambda *_: None)
+        encodes = []
+        reel = derives.encoder_segment
+        with mock.patch.object(derives, "ENCODAGE_VERSION", 99), \
+                mock.patch.object(derives, "encoder_segment",
+                                  side_effect=lambda p, i, c: (encodes.append(c.name), reel(p, i, c))):
+            second = derives.assembler_jour("leger", jour, journal=lambda *_: None)
+        self.assertEqual(sorted(encodes), ["seg_20261118T12Z.mp4", "seg_20261118T13Z.mp4"])
+        self.assertNotEqual(premier["video"], second["video"])
+
+
+@skipUnless(hasattr(os, "fork"), "fork indisponible (Windows)")
+class VerrouNoyauTests(DossierTemporaire, TestCase):
+    def test_libere_apres_sigkill(self):
+        from meteo_app.sources.commun import DejaEnCours
+        from meteo_app.sources.verrous import verrou_noyau
+
+        lecture, ecriture = os.pipe()
+        enfant = os.fork()
+        if enfant == 0:                       # processus qui garde le verrou
+            try:
+                with verrou_noyau("essai"):
+                    os.write(ecriture, b"1")
+                    time.sleep(60)
+            finally:
+                os._exit(0)
+        os.read(lecture, 1)
+        with self.assertRaises(DejaEnCours):
+            with verrou_noyau("essai"):
+                pass
+        os.kill(enfant, signal.SIGKILL)       # comme un oom-kill
+        os.waitpid(enfant, 0)
+        with verrou_noyau("essai"):           # repris immédiatement, sans attendre une heure
+            pass
+
+    def test_deux_passages_successifs(self):
+        from meteo_app.sources.verrous import verrou_noyau
+        for _ in range(2):
+            with verrou_noyau("essai"):
+                pass
+
+
+class PurgeListesTests(DossierTemporaire, TestCase):
+    def test_listes_abandonnees_effacees(self):
+        dossier = derives.dossier_video("leger", date(2026, 11, 18))
+        liste = dossier / ".liste_abc.txt"
+        liste.write_text("file 'x'\n")
+        ancien = time.time() - 7200
+        os.utime(liste, (ancien, ancien))
+        recente = dossier / ".liste_def.txt"
+        recente.write_text("file 'y'\n")
+        with mock.patch.object(derives, "conservation", return_value=timedelta(days=3650)):
+            derives.purger()
+        self.assertFalse(liste.exists())
+        self.assertTrue(recente.exists())     # peut-être en cours d'utilisation
+
+
+class JournalMemoireTests(TestCase):
+    def test_memoire_maximale(self):
+        from meteo_app.management.commands.hko_derives import memoire_maximale
+        texte = memoire_maximale()
+        if sys.platform != "win32":
+            self.assertRegex(texte, r"^mémoire max : Python \d+ Mo, FFmpeg \d+ Mo$")

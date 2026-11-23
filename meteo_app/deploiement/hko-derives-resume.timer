@@ -1,0 +1,17 @@
+# HKO Météo — résumés : à 1 h 47, 3 h 47 et 5 h 47 (heure du serveur).
+# La journée est close à minuit (Paris) ; ses dernières observations, cartes
+# fusionnées et images OPERA arrivent dans l'heure (marge de 80 min). Les
+# passages de 3 h 47 et 5 h 47 rattrapent un premier passage manqué.
+# Activation : sudo systemctl enable --now hko-derives-resume.timer
+
+[Unit]
+Description=HKO Météo — résumés des journées closes, chaque nuit
+
+[Timer]
+OnCalendar=*-*-* 01,03,05:47
+Persistent=true
+RandomizedDelaySec=60
+Unit=hko-derives-resume.service
+
+[Install]
+WantedBy=timers.target
